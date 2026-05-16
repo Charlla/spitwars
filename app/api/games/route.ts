@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Log the game
-    await db.from('spitwars_games').insert({
+    await db.from('spitwars_game_results').insert({
       player_id: player.id,
       mode: mode ?? 'local',
       room_code: room_code ?? null,
