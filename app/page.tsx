@@ -1,65 +1,111 @@
-import Image from "next/image";
+import Link from 'next/link';
+import { getSessionPlayer } from '@/lib/auth';
 
-export default function Home() {
+export default async function Home() {
+  const player = await getSessionPlayer();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-[#060614] text-white font-mono flex flex-col items-center justify-center p-4">
+      {/* Hero */}
+      <div className="flex flex-col items-center gap-1 mb-8">
+        <div className="text-5xl font-bold tracking-widest bg-gradient-to-r from-orange-500 via-yellow-400 to-cyan-500 bg-clip-text text-transparent">
+          SPITWARS
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="text-[11px] text-gray-600 tracking-widest">SPIT HAPPENS.</div>
+        <div className="text-[9px] text-cyan-700 tracking-wider border border-cyan-900 rounded px-1.5 py-0.5 mt-1">
+          EARLY ALPHA
         </div>
-      </main>
+      </div>
+
+      {/* Llamas SVG decoration */}
+      <div className="flex gap-4 mb-8 opacity-60">
+        <svg viewBox="0 0 100 80" className="w-16 h-12">
+          <ellipse cx="50" cy="55" rx="22" ry="18" fill="#f97316" />
+          <ellipse cx="68" cy="20" rx="12" ry="10" fill="#f97316" />
+          <ellipse cx="60" cy="10" rx="3" ry="6" fill="#f97316" />
+          <ellipse cx="76" cy="10" rx="3" ry="6" fill="#f97316" />
+          <circle cx="72" cy="18" r="2" fill="#1a1a2e" />
+        </svg>
+        <div className="text-2xl self-center">💦</div>
+        <svg viewBox="0 0 100 80" className="w-16 h-12" style={{ transform: 'scaleX(-1)' }}>
+          <ellipse cx="50" cy="55" rx="22" ry="18" fill="#06b6d4" />
+          <ellipse cx="68" cy="20" rx="12" ry="10" fill="#06b6d4" />
+          <ellipse cx="60" cy="10" rx="3" ry="6" fill="#06b6d4" />
+          <ellipse cx="76" cy="10" rx="3" ry="6" fill="#06b6d4" />
+          <circle cx="72" cy="18" r="2" fill="#1a1a2e" />
+        </svg>
+      </div>
+
+      {/* Main buttons */}
+      <div className="w-full max-w-xs flex flex-col gap-3">
+        <Link
+          href="/game"
+          className="w-full py-4 font-bold tracking-widest rounded-xl text-white text-center block"
+          style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}
+        >
+          PLAY SOLO
+        </Link>
+
+        {player ? (
+          <Link
+            href="/online"
+            className="w-full py-4 font-bold tracking-widest rounded-xl text-center block"
+            style={{
+              background: 'linear-gradient(135deg,#06b6d4,#0891b2)',
+              color: 'white',
+            }}
+          >
+            PLAY ONLINE
+          </Link>
+        ) : (
+          <Link
+            href="/auth"
+            className="w-full py-4 font-bold tracking-widest rounded-xl text-center block border"
+            style={{
+              borderColor: '#06b6d4',
+              color: '#06b6d4',
+              background: 'rgba(6,182,212,.08)',
+            }}
+          >
+            PLAY ONLINE →
+          </Link>
+        )}
+
+        <Link
+          href="/leaderboard"
+          className="w-full py-3 font-bold tracking-widest rounded-xl text-center block border border-gray-700 text-gray-400"
+        >
+          LEADERBOARD
+        </Link>
+      </div>
+
+      {/* Player info */}
+      {player && (
+        <div className="mt-6 text-center">
+          <div className="text-[11px] text-gray-500">
+            Logged in as{' '}
+            <span className="text-orange-400 font-bold">{player.username}</span>
+          </div>
+          <div className="text-[10px] text-gray-600 mt-0.5">
+            W{player.wins} / L{player.losses}
+          </div>
+          <form action="/api/auth/logout" method="post" className="inline">
+            <button type="submit" className="text-[10px] text-gray-700 hover:text-gray-500 mt-1 underline">
+              logout
+            </button>
+          </form>
+        </div>
+      )}
+
+      {!player && (
+        <div className="mt-4 text-[10px] text-gray-700">
+          <Link href="/auth" className="hover:text-gray-500">
+            Sign in for online play + leaderboard
+          </Link>
+        </div>
+      )}
+
+      <div className="mt-8 text-[9px] text-gray-800">spitwars.com</div>
     </div>
   );
 }
