@@ -39,6 +39,15 @@ test.describe.serial('Spit Wars smoke', () => {
     expect(box?.height ?? 0).toBeGreaterThan(100)
   })
 
+  test('FIRE button appears in HUD after starting battle', async ({ page }) => {
+    await page.goto('/game')
+    await page.getByRole('button', { name: /PASS & PLAY/i }).click()
+    await page.getByRole('button', { name: /START BATTLE/i }).click()
+    await page.locator('canvas').first().waitFor({ state: 'visible', timeout: 10_000 })
+    // FIRE button should be visible in the HUD
+    await expect(page.getByRole('button', { name: /^FIRE$/ })).toBeVisible({ timeout: 5_000 })
+  })
+
   test('online lobby requires auth', async ({ page }) => {
     const res = await page.goto('/online')
     // Either redirects to /auth or shows login prompt
