@@ -2,18 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
-// POST /api/games — submit a completed game result
+// POST /api/games — submit a completed game result.
+// Guests are accepted with 200/{guest:true} so the client doesn't fail; we just
+// don't record anything for them.
 export async function POST(req: NextRequest) {
   try {
     const player = await requireAuth(req);
-    if (!player) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const { room_code, winner_team, mode } = await req.json();
+
+    if (!player) {
+      // Guest game — accept but don't log.
+      return NextResponse.json({ ok: true, guest: true });
+    }
 
     const db = createClient();
 
-    // For online games: verify room exists and this player participated
     if (mode === 'online' && room_code) {
+      // Online game — verify participation and update both players' W/L
       const { data: room } = await db
         .from('spitwars_rooms')
         .select('host_id, guest_id, status')
@@ -25,8 +30,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Not a participant' }, { status: 403 });
       }
 
-      // Determine win/loss for this player
-      // Team 0 = host, team 1 = guest
       const isHost = room.host_id === player.id;
       const playerTeam = isHost ? 0 : 1;
       const won = winner_team === playerTeam;
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
         .update({ wins: won ? player.wins + 1 : player.wins, losses: won ? player.losses : player.losses + 1 })
         .eq('id', player.id);
 
-      // Update opponent too
+      // Update opponent too (only if also authed)
       const opponentId = isHost ? room.guest_id : room.host_id;
       if (opponentId) {
         const { data: opp } = await db
@@ -51,15 +54,25 @@ export async function POST(req: NextRequest) {
             .eq('id', opponentId);
         }
       }
+    } else if (mode === 'local') {
+      // Solo (VS AI) game — player team is always 0 (LLAMAS); count wins
+      const won = winner_team === 0;
+      await db
+        .from('spitwars_players')
+        .update({
+          wins: won ? player.wins + 1 : player.wins,
+          losses: won ? player.losses : player.losses + 1,
+        })
+        .eq('id', player.id);
     }
 
-    // Log the game
+    // Log to results table (best effort — silently skip if the table doesn't exist)
     await db.from('spitwars_game_results').insert({
       player_id: player.id,
       mode: mode ?? 'local',
       room_code: room_code ?? null,
       winner_team,
-    });
+    }).then(() => null, () => null);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

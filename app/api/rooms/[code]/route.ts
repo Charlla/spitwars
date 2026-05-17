@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
-// GET /api/rooms/[code] — get room state
-export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
-  const { code } = await params;
-  const player = await requireAuth(req);
-  if (!player) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+function cleanGuestName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20);
+  if (cleaned.length < 2) return null;
+  return cleaned;
+}
 
+// GET /api/rooms/[code] — get room state. Open to anyone.
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
   const db = createClient();
   const { data: room, error } = await db
     .from('spitwars_rooms')
@@ -22,11 +26,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   return NextResponse.json({ room });
 }
 
-// PATCH /api/rooms/[code] — join room OR update game state
+// PATCH /api/rooms/[code] — join room OR update game state. Guest play allowed.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const player = await requireAuth(req);
-  if (!player) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const db = createClient();
   const { data: room } = await db
@@ -39,23 +42,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
 
   const body = await req.json();
 
+  // Identity for a guest action: prefer player session, else guest name from body
+  const guestName = !player ? cleanGuestName(body?.guestName) : null;
+  const myName = player ? player.username : guestName;
+
   // Join room (guest joins a waiting room)
   if (body.action === 'join') {
+    if (!myName) {
+      return NextResponse.json({ error: 'Need a guest name (or sign in)' }, { status: 400 });
+    }
     if (room.status !== 'waiting') {
       return NextResponse.json({ error: 'Room is not open' }, { status: 400 });
     }
-    if (room.host_id === player.id) {
+    if (player && room.host_id === player.id) {
       return NextResponse.json({ error: 'You are the host' }, { status: 400 });
     }
-    if (room.guest_id) {
+    if (!player && room.host_name === myName) {
+      return NextResponse.json({ error: 'You are the host' }, { status: 400 });
+    }
+    if (room.guest_id || room.guest_name) {
       return NextResponse.json({ error: 'Room is full' }, { status: 400 });
     }
 
     const { data: updated, error } = await db
       .from('spitwars_rooms')
       .update({
-        guest_id: player.id,
-        guest_name: player.username,
+        guest_id: player ? player.id : null,
+        guest_name: myName,
         status: 'playing',
         updated_at: new Date().toISOString(),
       })
@@ -71,10 +84,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
     return NextResponse.json({ room: updated });
   }
 
-  // Update game state (submit turn)
+  // Update game state (submit turn) — must be participant
   if (body.action === 'state') {
-    // Only host or guest can update
-    if (room.host_id !== player.id && room.guest_id !== player.id) {
+    const isParticipant = player
+      ? room.host_id === player.id || room.guest_id === player.id
+      : !!myName && (room.host_name === myName || room.guest_name === myName);
+
+    if (!isParticipant) {
       return NextResponse.json({ error: 'Not a participant' }, { status: 403 });
     }
     if (!body.game_state) {
@@ -107,11 +123,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
 
   // Leave / close room
   if (body.action === 'leave') {
-    if (room.host_id === player.id) {
+    if (player && room.host_id === player.id) {
       await db.from('spitwars_rooms').delete().eq('code', code.toUpperCase());
       return NextResponse.json({ ok: true });
     }
-    if (room.guest_id === player.id) {
+    if (!player && myName && room.host_name === myName) {
+      await db.from('spitwars_rooms').delete().eq('code', code.toUpperCase());
+      return NextResponse.json({ ok: true });
+    }
+    const guestMatches = player
+      ? room.guest_id === player.id
+      : !!myName && room.guest_name === myName;
+    if (guestMatches) {
       const { data: updated } = await db
         .from('spitwars_rooms')
         .update({ guest_id: null, guest_name: null, status: 'waiting', updated_at: new Date().toISOString() })

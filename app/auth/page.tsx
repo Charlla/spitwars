@@ -26,7 +26,7 @@ export default function AuthPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        router.push('/online');
+        router.push('/');
         router.refresh();
       } else {
         setError(data.error ?? 'Login failed');
@@ -50,7 +50,7 @@ export default function AuthPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        router.push('/online');
+        router.push('/');
         router.refresh();
       } else {
         setError(data.error ?? 'Registration failed');
@@ -190,8 +190,9 @@ export default function AuthPage() {
           )}
         </div>
 
-        <div className="mt-4 text-center text-[10px] text-gray-700">
+        <div className="mt-4 flex items-center justify-between text-[10px] text-gray-700">
           <a href="/" className="hover:text-gray-500">← back to home</a>
+          <a href="/game" className="hover:text-orange-400 text-gray-500">Play as guest →</a>
         </div>
       </div>
     </div>

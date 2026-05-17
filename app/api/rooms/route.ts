@@ -11,11 +11,15 @@ function generateRoomCode(): string {
   return code;
 }
 
-// GET /api/rooms — list open rooms (status=waiting)
-export async function GET(req: NextRequest) {
-  const player = await requireAuth(req);
-  if (!player) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+function cleanGuestName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20);
+  if (cleaned.length < 2) return null;
+  return cleaned;
+}
 
+// GET /api/rooms — list open rooms (status=waiting). Open to anyone, no auth.
+export async function GET() {
   const db = createClient();
   const { data: rooms, error } = await db
     .from('spitwars_rooms')
@@ -32,10 +36,22 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ rooms: rooms ?? [] });
 }
 
-// POST /api/rooms — create a room
+// POST /api/rooms — create a room. Either authed player OR guest with a name.
 export async function POST(req: NextRequest) {
   const player = await requireAuth(req);
-  if (!player) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  let guestName: string | null = null;
+  if (!player) {
+    try {
+      const body = await req.json();
+      guestName = cleanGuestName(body?.guestName);
+    } catch {
+      // body might be empty
+    }
+    if (!guestName) {
+      return NextResponse.json({ error: 'Need a guest name (or sign in)' }, { status: 400 });
+    }
+  }
 
   const db = createClient();
 
@@ -57,8 +73,8 @@ export async function POST(req: NextRequest) {
     .from('spitwars_rooms')
     .insert({
       code,
-      host_id: player.id,
-      host_name: player.username,
+      host_id: player ? player.id : null,
+      host_name: player ? player.username : guestName!,
       status: 'waiting',
       game_state: null,
     })

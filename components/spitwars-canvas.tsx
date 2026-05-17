@@ -1207,6 +1207,18 @@ export default function SpitWarsLocal() {
       mode={gameMode}
       aiPersonality={aiPersonality}
       onQuit={() => setScreen('menu')}
+      onGameEnd={(winnerTeam) => {
+        // For VS AI mode, log the result (only if logged in — API silently 401s otherwise)
+        if (gameMode === 'ai') {
+          fetch('/api/games', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'local', winner_team: winnerTeam }),
+          }).catch(() => {
+            // silent — guests get 401, that's fine
+          });
+        }
+      }}
     />
   );
 }

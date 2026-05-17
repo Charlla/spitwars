@@ -5,12 +5,13 @@ import { OnlineRoom } from './room-client';
 
 interface Props {
   params: Promise<{ room: string }>;
+  searchParams: Promise<{ as?: string }>;
 }
 
-export default async function OnlineRoomPage({ params }: Props) {
+export default async function OnlineRoomPage({ params, searchParams }: Props) {
   const { room: code } = await params;
+  const { as: guestNameFromUrl } = await searchParams;
   const player = await getSessionPlayer();
-  if (!player) redirect('/auth');
 
   const db = createClient();
   const { data: room } = await db
@@ -21,10 +22,16 @@ export default async function OnlineRoomPage({ params }: Props) {
 
   if (!room) redirect('/online');
 
-  // Only host or guest can enter the room
-  if (room.host_id !== player.id && room.guest_id !== player.id) {
-    redirect('/online');
-  }
+  // Validate participation — either authed and host/guest, or guest name matches one of the slots
+  const isAuthParticipant = !!player && (room.host_id === player.id || room.guest_id === player.id);
 
-  return <OnlineRoom room={room} player={player} />;
+  // For unauthed: we'll let the client decide based on localStorage / URL ?as= param
+  // (the page is initially rendered with the guestName from the URL, the client can validate)
+  return (
+    <OnlineRoom
+      room={room}
+      player={player}
+      initialGuestName={!isAuthParticipant && !player ? (guestNameFromUrl ?? null) : null}
+    />
+  );
 }

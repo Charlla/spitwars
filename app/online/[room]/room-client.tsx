@@ -34,8 +34,11 @@ interface RoomData {
 
 interface Props {
   room: RoomData;
-  player: SessionPlayer;
+  player: SessionPlayer | null;
+  initialGuestName?: string | null;
 }
+
+const GUEST_NAME_KEY = 'spitwars_guest_name';
 
 interface ViewportState {
   x: number;
@@ -202,9 +205,21 @@ function drawScene(
   ctx.textBaseline = 'alphabetic';
 }
 
-export function OnlineRoom({ room: initialRoom, player }: Props) {
+export function OnlineRoom({ room: initialRoom, player, initialGuestName = null }: Props) {
   const router = useRouter();
   const [room, setRoom] = useState<RoomData>(initialRoom);
+  // Guest identity (only used when no session). Resolved client-side from
+  // localStorage so a guest's identity persists across reloads.
+  const [guestName, setGuestName] = useState<string | null>(initialGuestName);
+  useEffect(() => {
+    if (player || guestName) return;
+    try {
+      const stored = window.localStorage.getItem(GUEST_NAME_KEY);
+      if (stored && stored.trim()) setGuestName(stored.trim().slice(0, 20));
+    } catch {
+      // ignore
+    }
+  }, [player, guestName]);
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ CW: 390, CH: 480, WW: 780 });
   const [uiState, setUiState] = useState<GameState | null>(null);
   const [movesLeft, setMovesLeft] = useState(5);
@@ -234,8 +249,16 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
   const targetRef = useRef<HTMLDivElement>(null);
   const targetTextRef = useRef<HTMLSpanElement>(null);
 
-  // Determine if this player is host (team 0 = LLAMAS) or guest (team 1 = ALPACAS)
-  const isHost = room.host_id === player.id;
+  // Determine if this player is host (team 0 = LLAMAS) or guest (team 1 = ALPACAS).
+  // Authed players are matched by id; guests are matched by display name.
+  const myDisplayName = player?.username ?? guestName ?? '';
+  const isHost = player
+    ? room.host_id === player.id
+    : !!myDisplayName && room.host_name === myDisplayName;
+  const isGuestSlot = player
+    ? room.guest_id === player.id
+    : !!myDisplayName && room.guest_name === myDisplayName;
+  const isParticipant = isHost || isGuestSlot;
   const myTeam = isHost ? 0 : 1;
 
   // ─── Resize ─────────────────────────────────────────────────────────────────
@@ -418,14 +441,18 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
       await fetch(`/api/rooms/${room.code}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'state', game_state: snapshot }),
+        body: JSON.stringify(
+          player
+            ? { action: 'state', game_state: snapshot }
+            : { action: 'state', game_state: snapshot, guestName: myDisplayName },
+        ),
       });
     } catch {
       // silent
     } finally {
       setSubmitting(false);
     }
-  }, [room.code, submitting]);
+  }, [room.code, submitting, player, myDisplayName]);
 
   // ─── After each engine state change on my turn, push to Supabase ─────────
 
@@ -440,12 +467,14 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
     if (uiState.winner !== null) {
       const snapshot = engineRef.current.snapshot();
       submitState(snapshot);
-      // Record game result
-      fetch('/api/games', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room_code: room.code, winner_team: uiState.winner, mode: 'online' }),
-      });
+      // Record game result — only for authed players (guests don't have stats)
+      if (player) {
+        fetch('/api/games', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room_code: room.code, winner_team: uiState.winner, mode: 'online' }),
+        });
+      }
     }
   }, [uiState?.phase, uiState?.turnKey, uiState?.winner]);
 
@@ -501,7 +530,9 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
     await fetch(`/api/rooms/${room.code}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'leave' }),
+      body: JSON.stringify(
+        player ? { action: 'leave' } : { action: 'leave', guestName: myDisplayName },
+      ),
     });
     router.push('/online');
   };
@@ -511,6 +542,40 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
   const isMyTurn = currentState?.currentTeam === myTeam;
   const winner = currentState?.winner;
   const winTeam = winner !== null && winner !== undefined ? TEAMS[winner] : null;
+
+  // ─── Not a participant — guest with no identity match or random spectator ─
+
+  if (!isParticipant && room.status !== 'finished') {
+    return (
+      <div className="min-h-screen bg-[#060614] text-white font-mono flex flex-col items-center justify-center p-4 text-center">
+        <div className="text-2xl font-bold tracking-widest text-orange-400 mb-4">
+          ROOM #{room.code}
+        </div>
+        <div className="text-sm text-gray-400 mb-6">
+          {room.status === 'waiting'
+            ? `${room.host_name} is waiting for an opponent`
+            : `${room.host_name} vs ${room.guest_name} — game in progress`}
+        </div>
+        {room.status === 'waiting' ? (
+          <button
+            onClick={() => router.push(`/online?join=${room.code}`)}
+            className="px-6 py-3 font-bold rounded-lg text-white"
+            style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
+          >
+            GO TO LOBBY TO JOIN
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push('/online')}
+            className="px-6 py-3 font-bold rounded-lg text-white"
+            style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}
+          >
+            BACK TO LOBBY
+          </button>
+        )}
+      </div>
+    );
+  }
 
   // ─── Waiting room ────────────────────────────────────────────────────────
 
