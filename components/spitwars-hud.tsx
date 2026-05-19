@@ -280,11 +280,15 @@ export function SpitWarsHUD({
         </button>
       </div>
 
-      {/* Bottom: flavor message + quit */}
+      {/* Bottom: flavor message + menu */}
       <div className="flex justify-between items-center text-[9px] text-gray-500 mt-0.5">
         <span className="truncate flex-1">{state.msg}</span>
-        <button onClick={onQuit} className="text-gray-500 hover:text-gray-400 ml-2">
-          QUIT
+        <button
+          onClick={onQuit}
+          aria-label="Open menu and pause"
+          className="ml-2 inline-flex items-center gap-1 rounded-md border border-game-border-strong px-2 py-1 text-game-ink-muted hover:text-game-ink hover:border-game-accent/60"
+        >
+          ≡ MENU
         </button>
       </div>
     </div>

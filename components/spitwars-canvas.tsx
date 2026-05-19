@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { SpitWarsEngine } from '@/lib/spitwars-engine';
 import { SpitWarsHUD } from './spitwars-hud';
+import PauseOverlay from './games/PauseOverlay';
 import { TEAMS, WEAPONS } from '@/lib/spitwars-data';
 import type { GameMode, AiPersonality, Weapon } from '@/lib/spitwars-data';
 import type { GameState } from '@/lib/spitwars-engine';
@@ -739,6 +740,8 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
   const engineRef = useRef<SpitWarsEngine | null>(null);
   const rafRef = useRef<number>(0);
   const frameRef = useRef<number>(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pausedRef = useRef(false);
   const vpRef = useRef<ViewportState>({
     x: 0, targetX: 0, isDragging: false, dragStartX: 0, dragStartVP: 0,
     noSnap: false, snapTimer: null, holdAtImpact: false, impactX: 0,
@@ -837,6 +840,7 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
 
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop);
+      if (pausedRef.current) return;
       frameRef.current++;
       const frame = frameRef.current;
       const engine = engineRef.current;
@@ -1168,7 +1172,15 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
           onJetpackStop={() => engineRef.current?.jetpackStop()}
           onShield={() => engineRef.current?.shield()}
           onFire={handleFire}
-          onQuit={onQuit}
+          onQuit={() => { pausedRef.current = true; setMenuOpen(true) }}
+        />
+      )}
+      {menuOpen && (
+        <PauseOverlay
+          open={menuOpen}
+          title="PAUSED"
+          onResume={() => { pausedRef.current = false; setMenuOpen(false) }}
+          onQuit={() => { pausedRef.current = false; setMenuOpen(false); onQuit() }}
         />
       )}
 
