@@ -1,200 +1,136 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+
+type Step = 'email' | 'code'
 
 export default function AuthPage() {
-  const router = useRouter();
-  const [tab, setTab] = useState<'login' | 'register'>('login');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const router = useRouter()
+  const [step, setStep] = useState<Step>('email')
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const codeRef = useRef<HTMLInputElement>(null)
 
-  const [login, setLogin] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  useEffect(() => { if (step === 'code') codeRef.current?.focus() }, [step])
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  async function requestCode(e?: React.FormEvent) {
+    e?.preventDefault()
+    setError('')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.')
+      return
+    }
+    setLoading(true)
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login, password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        router.push('/');
-        router.refresh();
-      } else {
-        setError(data.error ?? 'Login failed');
-      }
-    } catch {
-      setError('Network error');
-    } finally {
-      setLoading(false);
-    }
-  };
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) setError(data.error ?? 'Could not send code.')
+      else setStep('code')
+    } catch { setError('Network error. Please try again.') }
+    finally { setLoading(false) }
+  }
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  async function verifyCode(e?: React.FormEvent) {
+    e?.preventDefault()
+    setError('')
+    if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code from your email.'); return }
+    setLoading(true)
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        router.push('/');
-        router.refresh();
-      } else {
-        setError(data.error ?? 'Registration failed');
-      }
-    } catch {
-      setError('Network error');
-    } finally {
-      setLoading(false);
-    }
-  };
+        body: JSON.stringify({ email: email.trim(), code }),
+      })
+      const data = await res.json()
+      if (!res.ok) setError(data.error ?? 'Verification failed.')
+      else router.push('/')
+    } catch { setError('Network error. Please try again.') }
+    finally { setLoading(false) }
+  }
 
   return (
-    <div className="min-h-screen bg-[#060614] text-white font-mono flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-xs">
-        {/* Logo */}
-        <div className="text-center mb-6">
-          <div className="text-3xl font-bold tracking-widest bg-gradient-to-r from-orange-500 via-yellow-400 to-cyan-500 bg-clip-text text-transparent">
+    <main className="flex min-h-svh items-center justify-center bg-game-deep px-4 text-game-ink">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <h1
+            className="select-none text-3xl font-extrabold leading-none tracking-tight font-mono"
+            style={{
+              background: 'linear-gradient(135deg, var(--game-accent) 0%, var(--game-accent-2) 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+            }}
+          >
             SPITWARS
-          </div>
-          <div className="text-[10px] text-gray-600 tracking-widest mt-1">ONLINE BATTLES</div>
+          </h1>
+          <p className="mt-2 text-[11px] font-mono uppercase tracking-[4px] text-game-ink-muted">Sign in</p>
         </div>
 
-        {/* Tab selector */}
-        <div className="flex gap-1 mb-4 bg-black/30 p-1 rounded-lg">
-          {(['login', 'register'] as const).map((t) => (
+        {step === 'email' ? (
+          <form onSubmit={requestCode} className="space-y-4">
+            <div>
+              <label className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Email</label>
+              <input
+                type="email" inputMode="email" autoComplete="email" autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-base text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
+              />
+            </div>
+            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
             <button
-              key={t}
-              onClick={() => { setTab(t); setError(''); }}
-              className="flex-1 py-2 rounded-md text-xs font-bold tracking-widest transition-all"
-              style={{
-                background: tab === t ? 'rgba(249,115,22,.2)' : 'transparent',
-                color: tab === t ? '#f97316' : '#6b7280',
-                border: tab === t ? '1px solid #f9731644' : '1px solid transparent',
-              }}
+              type="submit"
+              disabled={loading}
+              className="w-full inline-flex items-center justify-center h-12 rounded-game-pill font-mono font-black uppercase tracking-[4px] text-sm text-game-deep shadow-game-glow-md disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, var(--game-accent), color-mix(in oklab, var(--game-accent) 50%, var(--game-accent-2)))' }}
             >
-              {t === 'login' ? 'LOGIN' : 'REGISTER'}
+              {loading ? 'Sending…' : 'Send code'}
             </button>
-          ))}
-        </div>
-
-        {/* Form */}
-        <div className="bg-white/[.03] border border-[#1e3a2f] rounded-xl p-4">
-          {tab === 'login' ? (
-            <form onSubmit={handleLogin} className="flex flex-col gap-3">
-              <div>
-                <label className="text-[9px] text-gray-500 tracking-widest block mb-1">
-                  USERNAME OR EMAIL
-                </label>
-                <input
-                  type="text"
-                  value={login}
-                  onChange={(e) => setLogin(e.target.value)}
-                  required
-                  className="w-full bg-black/30 border border-gray-700 rounded-lg px-3 py-2.5 text-sm font-mono text-white placeholder-gray-600 focus:border-orange-700 focus:outline-none"
-                  placeholder="gerald or gerald@andes.com"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] text-gray-500 tracking-widest block mb-1">
-                  PASSWORD
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full bg-black/30 border border-gray-700 rounded-lg px-3 py-2.5 text-sm font-mono text-white placeholder-gray-600 focus:border-orange-700 focus:outline-none"
-                  placeholder="••••••••"
-                />
-              </div>
-              {error && <div className="text-red-400 text-[11px] text-center">{error}</div>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 font-bold tracking-widest rounded-lg text-white mt-1 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}
-              >
-                {loading ? 'LOGGING IN...' : 'LOGIN'}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleRegister} className="flex flex-col gap-3">
-              <div>
-                <label className="text-[9px] text-gray-500 tracking-widest block mb-1">
-                  USERNAME
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  minLength={3}
-                  maxLength={20}
-                  pattern="[a-zA-Z0-9_-]+"
-                  className="w-full bg-black/30 border border-gray-700 rounded-lg px-3 py-2.5 text-sm font-mono text-white placeholder-gray-600 focus:border-orange-700 focus:outline-none"
-                  placeholder="GeraldTheLlama"
-                />
-                <div className="text-[8px] text-gray-700 mt-1">3–20 chars, letters/numbers/_-</div>
-              </div>
-              <div>
-                <label className="text-[9px] text-gray-500 tracking-widest block mb-1">
-                  EMAIL
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full bg-black/30 border border-gray-700 rounded-lg px-3 py-2.5 text-sm font-mono text-white placeholder-gray-600 focus:border-orange-700 focus:outline-none"
-                  placeholder="gerald@andes.com"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] text-gray-500 tracking-widest block mb-1">
-                  PASSWORD
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full bg-black/30 border border-gray-700 rounded-lg px-3 py-2.5 text-sm font-mono text-white placeholder-gray-600 focus:border-orange-700 focus:outline-none"
-                  placeholder="min 6 characters"
-                />
-              </div>
-              {error && <div className="text-red-400 text-[11px] text-center">{error}</div>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 font-bold tracking-widest rounded-lg text-white mt-1 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}
-              >
-                {loading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}
-              </button>
-            </form>
-          )}
-        </div>
-
-        <div className="mt-4 flex items-center justify-between text-[10px] text-gray-700">
-          <a href="/" className="hover:text-gray-500">← back to home</a>
-          <a href="/game" className="hover:text-orange-400 text-gray-500">Play as guest →</a>
-        </div>
+            <p className="mt-6 text-center text-xs text-game-ink-faint">
+              <Link href="/" className="hover:text-game-ink">← Back to game</Link>
+            </p>
+          </form>
+        ) : (
+          <form onSubmit={verifyCode} className="space-y-4">
+            <p className="text-center text-sm text-game-ink-muted">
+              We sent a 6-digit code to <span className="text-game-ink">{email}</span>
+            </p>
+            <div>
+              <label className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Code</label>
+              <input
+                ref={codeRef}
+                type="text" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-center text-2xl font-mono tracking-[10px] text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
+              />
+            </div>
+            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
+            <button
+              type="submit"
+              disabled={loading || code.length !== 6}
+              className="w-full inline-flex items-center justify-center h-12 rounded-game-pill font-mono font-black uppercase tracking-[4px] text-sm text-game-deep shadow-game-glow-md disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, var(--game-accent), color-mix(in oklab, var(--game-accent) 50%, var(--game-accent-2)))' }}
+            >
+              {loading ? 'Verifying…' : 'Verify & sign in'}
+            </button>
+            <div className="flex items-center justify-between text-xs">
+              <button type="button" onClick={() => { setStep('email'); setCode(''); setError('') }} className="text-game-ink-muted hover:text-game-ink">← Use a different email</button>
+              <button type="button" onClick={() => requestCode()} disabled={loading} className="text-game-accent hover:underline disabled:opacity-60">Resend code</button>
+            </div>
+          </form>
+        )}
       </div>
-    </div>
-  );
+    </main>
+  )
 }
