@@ -1,26 +1,126 @@
 @import "tailwindcss";
 
+/* ── BAB Games Design System tokens — Spitwars palette ──────────────────────
+ * Team-coded: orange (team 0) vs cyan (team 1). Dark navy bg.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #060614;
+  --foreground: #f5f5f0;
+
+  /* Brand seeds */
+  --game-accent:    #f97316;     /* orange — team 0 */
+  --game-accent-2:  #06b6d4;     /* cyan — team 1 */
+  --game-ink:       #f5f5f0;
+
+  /* Surfaces */
+  --game-bg-deep:   #060614;
+  --game-bg:        #0d0d22;
+  --game-surface:   #16162e;
+  --game-surface-2: #1f1f3a;
+  --game-border:    rgba(255, 255, 255, 0.10);
+  --game-border-strong: rgba(255, 255, 255, 0.20);
+
+  /* Ink */
+  --game-ink-muted: rgba(245, 245, 240, 0.55);
+  --game-ink-faint: rgba(245, 245, 240, 0.30);
+
+  /* Status */
+  --game-success:   #22c55e;
+  --game-warning:   #facc15;
+  --game-danger:    #ef4444;
+  --game-info:      #38bdf8;
+
+  /* Glow shadows — orange primary, cyan secondary */
+  --game-glow-sm:   0 0 12px color-mix(in oklab, var(--game-accent) 50%, transparent);
+  --game-glow-md:   0 0 30px color-mix(in oklab, var(--game-accent) 45%, transparent);
+  --game-glow-lg:   0 0 60px color-mix(in oklab, var(--game-accent) 40%, transparent);
+  --game-glow-danger: 0 0 30px color-mix(in oklab, var(--game-danger) 55%, transparent);
+
+  /* Radii */
+  --game-radius-sm:   6px;
+  --game-radius-md:   10px;
+  --game-radius-lg:   18px;
+  --game-radius-pill: 9999px;
+
+  /* Type stack */
+  --font-arcade:   "Anton", "Impact", system-ui, sans-serif;
+  --font-ui:       "Geist", system-ui, -apple-system, sans-serif;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background:  var(--background);
+  --color-foreground:  var(--foreground);
+  --font-sans:         var(--font-geist-sans);
+  --font-mono:         var(--font-geist-mono);
+
+  --color-game-deep:       var(--game-bg-deep);
+  --color-game-bg:         var(--game-bg);
+  --color-game-surface:    var(--game-surface);
+  --color-game-surface-2:  var(--game-surface-2);
+  --color-game-border:     var(--game-border);
+  --color-game-border-strong: var(--game-border-strong);
+
+  --color-game-ink:        var(--game-ink);
+  --color-game-ink-muted:  var(--game-ink-muted);
+  --color-game-ink-faint:  var(--game-ink-faint);
+
+  --color-game-accent:     var(--game-accent);
+  --color-game-accent-2:   var(--game-accent-2);
+
+  --color-game-success:    var(--game-success);
+  --color-game-warning:    var(--game-warning);
+  --color-game-danger:     var(--game-danger);
+  --color-game-info:       var(--game-info);
+
+  --radius-game-sm:        var(--game-radius-sm);
+  --radius-game-md:        var(--game-radius-md);
+  --radius-game-lg:        var(--game-radius-lg);
+  --radius-game-pill:      var(--game-radius-pill);
+
+  --shadow-game-glow-sm:   var(--game-glow-sm);
+  --shadow-game-glow-md:   var(--game-glow-md);
+  --shadow-game-glow-lg:   var(--game-glow-lg);
+  --shadow-game-glow-danger: var(--game-glow-danger);
+
+  --font-arcade:   var(--font-arcade);
+  --font-game-ui:  var(--font-ui);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html, body {
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--game-accent) 30%, transparent);
+    color: var(--game-ink);
+  }
+  button, [role="button"] {
+    cursor: pointer;
+    transition: transform 70ms ease, opacity 150ms ease, filter 150ms ease;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  button:active:not(:disabled),
+  [role="button"]:active:not(:disabled) {
+    transform: scale(0.96);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes scoreFloat {
+  0%   { transform: translate(-50%, 0)    scale(0.7); opacity: 0; }
+  20%  { transform: translate(-50%, -10px) scale(1.1); opacity: 1; }
+  100% { transform: translate(-50%, -80px) scale(1.0); opacity: 0; }
 }
