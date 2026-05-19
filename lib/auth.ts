@@ -17,6 +17,7 @@ export interface SessionPlayer {
   id: string;
   username: string;
   email: string;
+  display_name: string | null;
   wins: number;
   losses: number;
   created_at: string;
@@ -86,7 +87,7 @@ async function lookupSession(raw: string | undefined): Promise<SessionPlayer | n
 
     const { data: player } = await db
       .from('spitwars_players')
-      .select('id, username, email, wins, losses, created_at')
+      .select('id, username, email, display_name, wins, losses, created_at')
       .eq('id', session.player_id)
       .single();
 

@@ -11,13 +11,6 @@ function generateRoomCode(): string {
   return code;
 }
 
-function cleanGuestName(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20);
-  if (cleaned.length < 2) return null;
-  return cleaned;
-}
-
 // GET /api/rooms — list open rooms (status=waiting). Open to anyone, no auth.
 export async function GET() {
   const db = createClient();
@@ -38,24 +31,16 @@ export async function GET() {
 
 // POST /api/rooms — create a room. Either authed player OR guest with a name.
 export async function POST(req: NextRequest) {
+  // Online play (create/join rooms) requires a signed-in player. Guest
+  // names are no longer accepted — sign in with OTP first.
   const player = await requireAuth(req);
-
-  let guestName: string | null = null;
   if (!player) {
-    try {
-      const body = await req.json();
-      guestName = cleanGuestName(body?.guestName);
-    } catch {
-      // body might be empty
-    }
-    if (!guestName) {
-      return NextResponse.json({ error: 'Need a guest name (or sign in)' }, { status: 400 });
-    }
+    return NextResponse.json({ error: 'Sign in to play online.' }, { status: 401 });
   }
 
   const db = createClient();
 
-  // Generate a unique 6-char code
+  // Generate a unique 6-char code (no hardcoded names)
   let code = generateRoomCode();
   let attempts = 0;
   while (attempts < 5) {
@@ -73,8 +58,8 @@ export async function POST(req: NextRequest) {
     .from('spitwars_rooms')
     .insert({
       code,
-      host_id: player ? player.id : null,
-      host_name: player ? player.username : guestName!,
+      host_id: player.id,
+      host_name: player.username,
       status: 'waiting',
       game_state: null,
     })

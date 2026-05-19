@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     let { data: player } = await db
       .from('spitwars_players')
-      .select('id, username, email, wins, losses, created_at')
+      .select('id, username, email, display_name, wins, losses, created_at')
       .eq('email', normalised)
       .maybeSingle()
 
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       const { data: created, error } = await db
         .from('spitwars_players')
         .insert({ email: normalised, username })
-        .select('id, username, email, wins, losses, created_at')
+        .select('id, username, email, display_name, wins, losses, created_at')
         .single()
       if (error || !created) {
         console.error('[verify-otp] create player', error)
