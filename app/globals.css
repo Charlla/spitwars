@@ -103,6 +103,10 @@
     user-select: none;
     -webkit-user-select: none;
   }
+  /* Prevent iOS focus-zoom on text inputs (must be ≥16px). */
+  input, select, textarea {
+    font-size: max(16px, 1rem) !important;
+  }
   ::selection {
     background-color: color-mix(in oklab, var(--game-accent) 30%, transparent);
     color: var(--game-ink);
