@@ -14,7 +14,8 @@ export default function AuthPage() {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [humanOk, setHumanOk] = useState(false)
+  const [verifyToken, setVerifyToken] = useState<string | null>(null)
+  const humanOk = !!verifyToken
   const codeRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (step === 'code') codeRef.current?.focus() }, [step])
@@ -31,7 +32,7 @@ export default function AuthPage() {
       const res = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: email.trim(), verifyToken }),
       })
       const data = await res.json()
       if (!res.ok) setError(data.error ?? 'Could not send code.')
@@ -88,7 +89,7 @@ export default function AuthPage() {
                 className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-base text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
               />
             </div>
-            <HumanVerify onVerified={() => setHumanOk(true)} />
+            <HumanVerify onVerified={(t) => setVerifyToken(t)} />
             {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
             <button
               type="submit"
