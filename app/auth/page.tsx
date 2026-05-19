@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { HumanVerify } from '@/components/games/HumanVerify'
 
 type Step = 'email' | 'code'
 
@@ -13,6 +14,7 @@ export default function AuthPage() {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [humanOk, setHumanOk] = useState(false)
   const codeRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (step === 'code') codeRef.current?.focus() }, [step])
@@ -86,12 +88,14 @@ export default function AuthPage() {
                 className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-base text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
               />
             </div>
+            <HumanVerify onVerified={() => setHumanOk(true)} />
             {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !humanOk}
               className="w-full inline-flex items-center justify-center h-12 rounded-game-pill font-mono font-black uppercase tracking-[4px] text-sm text-game-deep shadow-game-glow-md disabled:opacity-60"
               style={{ background: 'linear-gradient(135deg, var(--game-accent), color-mix(in oklab, var(--game-accent) 50%, var(--game-accent-2)))' }}
+              title={!humanOk ? 'Complete the human check first' : undefined}
             >
               {loading ? 'Sending…' : 'Send code'}
             </button>
