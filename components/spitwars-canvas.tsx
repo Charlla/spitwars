@@ -7,9 +7,12 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { SpitWarsEngine } from '@/lib/spitwars-engine';
 import { SpitWarsHUD } from './spitwars-hud';
 import PauseOverlay from './games/PauseOverlay';
+import NeonButton from './games/NeonButton';
 import { TEAMS, WEAPONS } from '@/lib/spitwars-data';
 import type { GameMode, AiPersonality, Weapon } from '@/lib/spitwars-data';
 import type { GameState } from '@/lib/spitwars-engine';
@@ -198,7 +201,16 @@ function MenuScreen({ onStart }: { onStart: (mode: GameMode, ai: AiPersonality) 
         </div>
       </div>
 
-      <div className="mt-6 text-center">
+      <div className="mt-4 w-full max-w-xs">
+        <Link
+          href="/"
+          className="inline-flex w-full min-h-11 items-center justify-center gap-2 rounded-lg border border-gray-700 px-4 py-2.5 text-xs font-bold tracking-widest text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
+        >
+          ← MAIN MENU
+        </Link>
+      </div>
+
+      <div className="mt-4 text-center">
         <div className="text-[9px] text-gray-700">spitwars.com</div>
       </div>
     </div>
@@ -747,11 +759,14 @@ function drawLlama(
 interface GameCanvasProps {
   mode: GameMode;
   aiPersonality: AiPersonality;
+  /** Back to the in-app mode-select screen */
   onQuit: () => void;
+  /** Back to the main start menu at `/` */
+  onMainMenu: () => void;
   onGameEnd?: (winnerTeam: number) => void;
 }
 
-export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: GameCanvasProps) {
+export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onMainMenu, onGameEnd }: GameCanvasProps) {
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ CW: 390, CH: 480, WW: 780, dpr: 1 });
   const [uiState, setUiState] = useState<GameState | null>(null);
   const [movesLeft, setMovesLeft] = useState(5);
@@ -764,6 +779,8 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
   const rafRef = useRef<number>(0);
   const frameRef = useRef<number>(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Quit destination pending confirmation (round in progress) — null = no confirm open
+  const [confirmQuit, setConfirmQuit] = useState<'modeselect' | 'mainmenu' | null>(null);
   const pausedRef = useRef(false);
   const vpRef = useRef<ViewportState>({
     x: 0, targetX: 0, isDragging: false, dragStartX: 0, dragStartVP: 0,
@@ -1126,7 +1143,7 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
                 {winTeam.name} WIN!
               </div>
               <div className="text-sm text-gray-500">Spit happens.</div>
-              <div className="flex gap-3 mt-4">
+              <div className="flex flex-wrap justify-center gap-3 mt-4 px-2">
                 <button
                   onClick={() => {
                     handleGameEnd(winner);
@@ -1157,9 +1174,15 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
                 </button>
                 <button
                   onClick={onQuit}
-                  className="px-6 py-3 min-h-11 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition"
+                  className="px-4 py-3 min-h-11 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition"
                 >
-                  MENU
+                  MODE SELECT
+                </button>
+                <button
+                  onClick={onMainMenu}
+                  className="px-4 py-3 min-h-11 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition"
+                >
+                  MAIN MENU
                 </button>
               </div>
             </div>
@@ -1206,12 +1229,44 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
           onQuit={() => { pausedRef.current = true; setMenuOpen(true) }}
         />
       )}
-      {menuOpen && (
+      {menuOpen && !confirmQuit && (
         <PauseOverlay
           open={menuOpen}
           title="PAUSED"
           onResume={() => { pausedRef.current = false; setMenuOpen(false) }}
-          onQuit={() => { pausedRef.current = false; setMenuOpen(false); onQuit() }}
+          extra={
+            <NeonButton
+              variant="ghost"
+              size="md"
+              fullWidth
+              onClick={() => { setMenuOpen(false); setConfirmQuit('modeselect') }}
+            >
+              Mode Select
+            </NeonButton>
+          }
+          onQuit={() => { setMenuOpen(false); setConfirmQuit('mainmenu') }}
+          quitLabel="Main Menu"
+        />
+      )}
+      {confirmQuit && (
+        <PauseOverlay
+          open
+          title="QUIT?"
+          message={
+            mode === 'passplay'
+              ? 'This battle will be abandoned for both players.'
+              : 'This battle will be abandoned. Spit happens.'
+          }
+          onResume={() => { setConfirmQuit(null); pausedRef.current = false }}
+          resumeLabel="Keep Playing"
+          onQuit={() => {
+            const dest = confirmQuit;
+            setConfirmQuit(null);
+            pausedRef.current = false;
+            if (dest === 'mainmenu') onMainMenu();
+            else onQuit();
+          }}
+          quitLabel="Quit Battle"
         />
       )}
 
@@ -1229,6 +1284,7 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
 // ─── Exported wrapper with menu ───────────────────────────────────────────────
 
 export default function SpitWarsLocal() {
+  const router = useRouter();
   const [screen, setScreen] = useState<'menu' | 'game'>('menu');
   const [gameMode, setGameMode] = useState<GameMode>('passplay');
   const [aiPersonality, setAiPersonality] = useState<AiPersonality>('karen');
@@ -1250,6 +1306,7 @@ export default function SpitWarsLocal() {
       mode={gameMode}
       aiPersonality={aiPersonality}
       onQuit={() => setScreen('menu')}
+      onMainMenu={() => router.push('/')}
       onGameEnd={(winnerTeam) => {
         // For VS AI mode, log the result (only if logged in — API silently 401s otherwise)
         if (gameMode === 'ai') {

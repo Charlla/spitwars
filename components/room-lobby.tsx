@@ -151,8 +151,14 @@ export function RoomLobby({ player }: RoomLobbyProps) {
           >
             Sign in to play online
           </a>
+          <a
+            href="/"
+            className="inline-flex w-full min-h-11 items-center justify-center rounded-game-pill border border-game-border-strong text-xs font-bold uppercase tracking-[3px] text-game-ink-muted hover:text-game-ink hover:border-game-accent/60 transition-colors"
+          >
+            ← Main menu
+          </a>
           <a href="/game" className="block text-[11px] text-game-ink-faint hover:text-game-ink-muted">
-            ← back to solo play
+            or play solo without an account
           </a>
         </div>
       </div>
@@ -193,6 +199,12 @@ export function RoomLobby({ player }: RoomLobbyProps) {
           >
             {savingProfile ? 'Saving…' : 'Save and continue'}
           </button>
+          <a
+            href="/"
+            className="inline-flex w-full min-h-11 items-center justify-center text-[11px] text-game-ink-faint hover:text-game-ink-muted"
+          >
+            ← back to main menu
+          </a>
         </form>
       </div>
     );
@@ -304,12 +316,12 @@ export function RoomLobby({ player }: RoomLobbyProps) {
           )}
         </div>
 
-        <div className="mt-6 flex gap-3 justify-center text-[10px] flex-wrap">
-          <a href="/" className="text-game-ink-faint hover:text-game-ink-muted">HOME</a>
+        <div className="mt-4 flex gap-1 justify-center items-center text-[10px] flex-wrap">
+          <a href="/" className="inline-flex min-h-11 items-center px-3 text-game-ink-faint hover:text-game-ink-muted">MAIN MENU</a>
           <span className="text-game-ink-faint">·</span>
-          <a href="/game" className="text-game-ink-faint hover:text-game-ink-muted">SOLO PLAY</a>
+          <a href="/game" className="inline-flex min-h-11 items-center px-3 text-game-ink-faint hover:text-game-ink-muted">SOLO PLAY</a>
           <span className="text-game-ink-faint">·</span>
-          <a href="/leaderboard" className="text-game-ink-faint hover:text-game-ink-muted">LEADERBOARD</a>
+          <a href="/leaderboard" className="inline-flex min-h-11 items-center px-3 text-game-ink-faint hover:text-game-ink-muted">LEADERBOARD</a>
         </div>
       </div>
     </div>

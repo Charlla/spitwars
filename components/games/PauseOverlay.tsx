@@ -20,10 +20,14 @@ import NeonButton from './NeonButton'
 export interface PauseOverlayProps {
   open: boolean
   title?: string
+  /** Optional helper text rendered under the title (e.g. confirm copy) */
+  message?: ReactNode
   onResume?: () => void
+  resumeLabel?: string
   onRestart?: () => void
   onSettings?: () => void
   onQuit?: () => void
+  quitLabel?: string
   /** Slot for additional buttons or content between Resume and Settings */
   extra?: ReactNode
 }
@@ -31,10 +35,13 @@ export interface PauseOverlayProps {
 export default function PauseOverlay({
   open,
   title = 'PAUSED',
+  message,
   onResume,
+  resumeLabel = 'Resume',
   onRestart,
   onSettings,
   onQuit,
+  quitLabel = 'Quit',
   extra,
 }: PauseOverlayProps) {
   useEffect(() => {
@@ -61,8 +68,13 @@ export default function PauseOverlay({
         >
           {title}
         </h2>
+        {message && (
+          <p className="mb-1 text-center font-mono text-xs leading-relaxed text-game-ink-muted">
+            {message}
+          </p>
+        )}
         {onResume && (
-          <NeonButton variant="primary" size="md" fullWidth onClick={onResume}>Resume</NeonButton>
+          <NeonButton variant="primary" size="md" fullWidth onClick={onResume}>{resumeLabel}</NeonButton>
         )}
         {extra}
         {onRestart && (
@@ -72,7 +84,7 @@ export default function PauseOverlay({
           <NeonButton variant="ghost" size="md" fullWidth onClick={onSettings}>Settings</NeonButton>
         )}
         {onQuit && (
-          <NeonButton variant="danger" size="md" fullWidth onClick={onQuit}>Quit</NeonButton>
+          <NeonButton variant="danger" size="md" fullWidth onClick={onQuit}>{quitLabel}</NeonButton>
         )}
       </div>
     </div>

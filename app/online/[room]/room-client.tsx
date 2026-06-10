@@ -590,7 +590,9 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
     }
   };
 
-  const leaveRoom = async () => {
+  // Leaves the room server-side (notifies opponent / closes the room) then
+  // lands the player at `dest` — '/online' (lobby) or '/' (main menu).
+  const leaveRoom = async (dest: string = '/online') => {
     if (leaving) return;
     setLeaving(true);
     try {
@@ -602,7 +604,7 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
     } catch {
       // leaving anyway
     }
-    router.push('/online');
+    router.push(dest);
   };
 
   const joinRoom = async () => {
@@ -666,6 +668,12 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
         >
           BACK TO LOBBY
         </button>
+        <button
+          onClick={() => router.push('/')}
+          className="mt-3 min-h-11 px-6 py-2.5 text-xs font-bold tracking-widest text-gray-400 border border-gray-700 rounded-lg hover:text-gray-200 hover:border-gray-500 transition"
+        >
+          MAIN MENU
+        </button>
       </div>
     );
   }
@@ -690,8 +698,11 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
         >
           SIGN IN TO PLAY
         </a>
-        <a href="/game" className="mt-4 text-[11px] text-gray-600 hover:text-gray-400 underline">
+        <a href="/game" className="mt-4 inline-flex min-h-11 items-center text-[11px] text-gray-600 hover:text-gray-400 underline">
           or play solo without an account
+        </a>
+        <a href="/" className="inline-flex min-h-11 items-center text-[11px] text-gray-600 hover:text-gray-400">
+          ← main menu
         </a>
       </div>
     );
@@ -731,6 +742,11 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
             BACK TO LOBBY
           </button>
         )}
+        <div className="mt-4 flex gap-1 items-center text-[11px] flex-wrap justify-center">
+          <a href="/online" className="inline-flex min-h-11 items-center px-3 text-gray-600 hover:text-gray-400">LOBBY</a>
+          <span className="text-gray-700">·</span>
+          <a href="/" className="inline-flex min-h-11 items-center px-3 text-gray-600 hover:text-gray-400">MAIN MENU</a>
+        </div>
       </div>
     );
   }
@@ -794,13 +810,22 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
             </div>
           )}
 
-          <button
-            onClick={leaveRoom}
-            disabled={leaving}
-            className="min-h-11 px-4 text-xs text-gray-500 hover:text-gray-300 border border-gray-800 rounded-lg disabled:opacity-50"
-          >
-            {leaving ? 'CANCELLING…' : isHost ? 'CANCEL ROOM' : 'LEAVE'}
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={() => leaveRoom('/online')}
+              disabled={leaving}
+              className="min-h-11 px-4 text-xs text-gray-500 hover:text-gray-300 border border-gray-800 rounded-lg disabled:opacity-50"
+            >
+              {leaving ? 'CANCELLING…' : isHost ? 'CANCEL ROOM' : 'LEAVE'}
+            </button>
+            <button
+              onClick={() => leaveRoom('/')}
+              disabled={leaving}
+              className="min-h-11 px-4 text-xs text-gray-500 hover:text-gray-300 border border-gray-800 rounded-lg disabled:opacity-50"
+            >
+              MAIN MENU
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -876,11 +901,18 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
                   {rematching ? 'STARTING…' : 'REMATCH'}
                 </button>
                 <button
-                  onClick={leaveRoom}
+                  onClick={() => leaveRoom('/online')}
                   disabled={leaving}
-                  className="min-h-12 px-6 py-3 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
+                  className="min-h-12 px-4 py-3 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
                 >
-                  {leaving ? 'LEAVING…' : 'LEAVE'}
+                  {leaving ? 'LEAVING…' : 'LOBBY'}
+                </button>
+                <button
+                  onClick={() => leaveRoom('/')}
+                  disabled={leaving}
+                  className="min-h-12 px-4 py-3 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  MAIN MENU
                 </button>
               </div>
               <div className="text-[10px] text-gray-600 mt-1">
@@ -895,8 +927,8 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
               <div className="text-xl font-bold tracking-widest text-orange-400">LEAVE BATTLE?</div>
               <div className="text-xs text-gray-500 text-center max-w-[240px]">
                 {isHost
-                  ? 'Leaving closes the room for both players.'
-                  : 'Your opponent will be left waiting for a new challenger.'}
+                  ? 'Leaving closes the room for both players. You’ll return to the main menu.'
+                  : 'Your opponent will be left waiting for a new challenger. You’ll return to the main menu.'}
               </div>
               <div className="flex gap-3">
                 <button
@@ -907,7 +939,7 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
                   KEEP PLAYING
                 </button>
                 <button
-                  onClick={leaveRoom}
+                  onClick={() => leaveRoom('/')}
                   disabled={leaving}
                   className="min-h-12 px-6 py-3 border border-red-900 text-red-400 rounded-lg hover:bg-red-950 transition disabled:opacity-50"
                 >
