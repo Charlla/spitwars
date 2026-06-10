@@ -51,6 +51,7 @@ interface ViewportState {
   snapTimer: ReturnType<typeof setTimeout> | null;
   holdAtImpact: boolean;
   impactX: number;
+  lastTurnKey: number; // detects turn changes so the camera re-centers on the active unit
 }
 
 interface AimState {
@@ -216,6 +217,7 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
   const vpRef = useRef<ViewportState>({
     x: 0, targetX: 0, isDragging: false, dragStartX: 0, dragStartVP: 0,
     noSnap: false, snapTimer: null, holdAtImpact: false, impactX: 0,
+    lastTurnKey: 0,
   });
   const aimRef = useRef<AimState>({
     power: 50, powerDir: 1,
@@ -461,16 +463,31 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
         aimDirFacingRef.current.dir = avgEnemyX > curUnit.x ? 1 : -1;
       }
 
+      // Turn changed (locally simulated or arrived via realtime/poll snapshot) →
+      // release the impact hold and any manual-pan lock so the camera smoothly
+      // pans to the unit whose turn it now is (eased lerp below).
+      if (s.turnKey !== vp.lastTurnKey) {
+        vp.lastTurnKey = s.turnKey;
+        vp.holdAtImpact = false;
+        vp.noSnap = false;
+        if (vp.snapTimer) { clearTimeout(vp.snapTimer); vp.snapTimer = null; }
+      }
+
       // Viewport
       const activeProj = s.phase === 'firing' ? s.projs.find((p) => p.active) : null;
       if (activeProj) {
         vp.targetX = Math.max(0, Math.min(WW - CW, activeProj.x - CW / 2));
+        vp.impactX = activeProj.x;
       } else if (vp.holdAtImpact) {
         vp.targetX = Math.max(0, Math.min(WW - CW, vp.impactX - CW / 2));
       } else if (curUnit) {
         vp.targetX = Math.max(0, Math.min(WW - CW, curUnit.x - CW / 2));
       }
-      if (!vp.isDragging) vp.x += (vp.targetX - vp.x) * 0.07;
+      // Auto-pan during action phases; while aiming, respect a manual drag
+      // (noSnap) until the player's look-around grace period expires.
+      if (!vp.isDragging && (s.phase === 'firing' || s.phase === 'transitioning' || !vp.noSnap)) {
+        vp.x += (vp.targetX - vp.x) * 0.07;
+      }
 
       drawScene(ctx, CW, CH, WW, vp.x, s);
     };
@@ -510,6 +527,7 @@ export function OnlineRoom({ room: initialRoom, player }: Props) {
     const vp = vpRef.current;
     if (vp.snapTimer) clearTimeout(vp.snapTimer);
     vp.isDragging = true;
+    vp.noSnap = true;
     vp.dragStartX = e.clientX;
     vp.dragStartVP = vp.x;
   }, []);

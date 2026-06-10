@@ -26,6 +26,7 @@ interface ViewportState {
   snapTimer: ReturnType<typeof setTimeout> | null;
   holdAtImpact: boolean;
   impactX: number;
+  lastTurnKey: number; // detects turn changes so the camera re-centers on the active unit
 }
 
 // ─── Aim state ────────────────────────────────────────────────────────────────
@@ -767,6 +768,7 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
   const vpRef = useRef<ViewportState>({
     x: 0, targetX: 0, isDragging: false, dragStartX: 0, dragStartVP: 0,
     noSnap: false, snapTimer: null, holdAtImpact: false, impactX: 0,
+    lastTurnKey: 0,
   });
   const aimRef = useRef<AimState>({
     power: 50, powerDir: 1,
@@ -913,6 +915,15 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
         const enemies = s.units.filter((u) => u.team !== s.currentTeam && u.alive);
         const avgEnemyX = enemies.length ? enemies.reduce((a, u) => a + u.x, 0) / enemies.length : WW / 2;
         aimDirFacingRef.current.dir = avgEnemyX > curUnit.x ? 1 : -1;
+      }
+
+      // Turn changed → release the impact hold and any manual-pan lock so the
+      // camera smoothly pans to the unit whose turn it now is (eased lerp below).
+      if (s.turnKey !== vp.lastTurnKey) {
+        vp.lastTurnKey = s.turnKey;
+        vp.holdAtImpact = false;
+        vp.noSnap = false;
+        if (vp.snapTimer) { clearTimeout(vp.snapTimer); vp.snapTimer = null; }
       }
 
       // Viewport tracking
