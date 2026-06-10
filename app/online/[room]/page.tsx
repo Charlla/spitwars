@@ -5,33 +5,22 @@ import { OnlineRoom } from './room-client';
 
 interface Props {
   params: Promise<{ room: string }>;
-  searchParams: Promise<{ as?: string }>;
 }
 
-export default async function OnlineRoomPage({ params, searchParams }: Props) {
+export default async function OnlineRoomPage({ params }: Props) {
   const { room: code } = await params;
-  const { as: guestNameFromUrl } = await searchParams;
   const player = await getSessionPlayer();
 
   const db = createClient();
   const { data: room } = await db
     .from('spitwars_rooms')
-    .select('*')
+    .select('id, code, host_id, host_name, guest_id, guest_name, status, game_state, updated_at')
     .eq('code', code.toUpperCase())
     .maybeSingle();
 
   if (!room) redirect('/online');
 
-  // Validate participation — either authed and host/guest, or guest name matches one of the slots
-  const isAuthParticipant = !!player && (room.host_id === player.id || room.guest_id === player.id);
-
-  // For unauthed: we'll let the client decide based on localStorage / URL ?as= param
-  // (the page is initially rendered with the guestName from the URL, the client can validate)
-  return (
-    <OnlineRoom
-      room={room}
-      player={player}
-      initialGuestName={!isAuthParticipant && !player ? (guestNameFromUrl ?? null) : null}
-    />
-  );
+  // Identity is session-only (online play is OTP-gated). The client renders a
+  // sign-in CTA / join prompt / waiting room / game based on participation.
+  return <OnlineRoom room={room} player={player} />;
 }

@@ -61,7 +61,7 @@ export default async function Home() {
         {player ? (
           <div className="mt-6 text-center">
             <div className="text-[11px] text-game-ink-muted">
-              Logged in as <span className="text-game-accent font-bold">{player.username}</span>
+              Logged in as <span className="text-game-accent font-bold">{player.display_name?.trim() || player.username}</span>
             </div>
             <div className="text-[10px] text-game-ink-faint mt-0.5">
               W{player.wins} / L{player.losses}

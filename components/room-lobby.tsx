@@ -145,7 +145,7 @@ export function RoomLobby({ player }: RoomLobbyProps) {
             Online play requires sign-in so we can pair you with other players and save your stats.
           </p>
           <a
-            href="/auth"
+            href="/auth?next=%2Fonline"
             className="inline-flex items-center justify-center w-full h-12 rounded-game-pill font-mono font-black uppercase tracking-[4px] text-sm text-game-deep shadow-game-glow-md"
             style={{ background: 'linear-gradient(135deg, var(--game-accent), color-mix(in oklab, var(--game-accent) 50%, var(--game-accent-2)))' }}
           >
@@ -225,25 +225,34 @@ export function RoomLobby({ player }: RoomLobbyProps) {
             {creating ? 'CREATING...' : '+ CREATE ROOM'}
           </button>
 
-          <div className="flex gap-2">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => { e.preventDefault(); handleJoinRoom(joinCode); }}
+          >
             <input
               type="text"
               value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
               placeholder="ENTER CODE"
-              className="flex-1 bg-game-bg/60 border border-game-border rounded-lg px-3 py-2 text-base font-mono tracking-widest text-game-ink placeholder:text-game-ink-faint focus:border-game-accent focus:outline-none"
+              aria-label="Room code"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              enterKeyHint="go"
+              className="flex-1 min-w-0 h-12 bg-game-bg/60 border border-game-border rounded-lg px-3 text-base font-mono tracking-[6px] text-center text-game-ink placeholder:text-game-ink-faint placeholder:tracking-widest focus:border-game-accent focus:outline-none"
               maxLength={6}
             />
             <button
-              onClick={() => handleJoinRoom(joinCode)}
+              type="submit"
               disabled={joining || joinCode.length < 6}
-              className="px-4 py-2 font-bold rounded-lg text-game-ink disabled:opacity-50 text-sm"
+              className="h-12 px-5 font-bold rounded-lg text-game-ink disabled:opacity-50 text-sm flex-shrink-0"
               style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
             >
               {joining ? '...' : 'JOIN'}
             </button>
-          </div>
-          {joinError && <div className="text-game-danger text-[11px]">{joinError}</div>}
+          </form>
+          {joinError && <div className="text-game-danger text-[11px]" role="alert" aria-live="polite">{joinError}</div>}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -273,7 +282,8 @@ export function RoomLobby({ player }: RoomLobbyProps) {
                     <button
                       onClick={() => handleJoinRoom(room.code)}
                       disabled={joining}
-                      className="px-3 py-1.5 text-xs font-bold rounded-lg text-game-ink disabled:opacity-50 flex-shrink-0"
+                      aria-label={`Join ${room.host_name}'s room ${room.code}`}
+                      className="min-h-11 px-4 py-2 text-xs font-bold rounded-lg text-game-ink disabled:opacity-50 flex-shrink-0"
                       style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
                     >
                       JOIN
@@ -282,7 +292,8 @@ export function RoomLobby({ player }: RoomLobbyProps) {
                   {isMine && (
                     <button
                       onClick={() => router.push(`/online/${room.code}`)}
-                      className="px-3 py-1.5 text-xs font-bold rounded-lg text-game-accent border border-game-accent/60 flex-shrink-0"
+                      aria-label={`Resume your room ${room.code}`}
+                      className="min-h-11 px-4 py-2 text-xs font-bold rounded-lg text-game-accent border border-game-accent/60 flex-shrink-0"
                     >
                       RESUME
                     </button>

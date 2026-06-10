@@ -1,20 +1,31 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useRef, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { HumanVerify } from '@/components/games/HumanVerify'
 
 type Step = 'email' | 'code'
 
-export default function AuthPage() {
+// Only allow same-site relative paths — never an absolute URL (open redirect).
+function safeNext(raw: string | null): string {
+  // `/\evil.com` is treated as `//evil.com` by browsers — block backslash too.
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return '/'
+  return raw
+}
+
+function AuthForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextPath = safeNext(searchParams.get('next'))
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
   const [verifyToken, setVerifyToken] = useState<string | null>(null)
+  const [humanKey, setHumanKey] = useState(0) // remount HumanVerify for resend
   const humanOk = !!verifyToken
   const codeRef = useRef<HTMLInputElement>(null)
 
@@ -23,6 +34,7 @@ export default function AuthPage() {
   async function requestCode(e?: React.FormEvent) {
     e?.preventDefault()
     setError('')
+    setNotice('')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError('Please enter a valid email address.')
       return
@@ -36,9 +48,23 @@ export default function AuthPage() {
       })
       const data = await res.json()
       if (!res.ok) setError(data.error ?? 'Could not send code.')
-      else setStep('code')
+      else {
+        // The human-verify token is single-use — a resend needs a fresh one.
+        setVerifyToken(null)
+        setStep('code')
+      }
     } catch { setError('Network error. Please try again.') }
     finally { setLoading(false) }
+  }
+
+  function resendCode() {
+    // Token already consumed — go back for a fresh human check.
+    setVerifyToken(null)
+    setHumanKey((k) => k + 1)
+    setCode('')
+    setError('')
+    setStep('email')
+    setNotice('Quick human check again, then we’ll send a fresh code.')
   }
 
   async function verifyCode(e?: React.FormEvent) {
@@ -54,7 +80,10 @@ export default function AuthPage() {
       })
       const data = await res.json()
       if (!res.ok) setError(data.error ?? 'Verification failed.')
-      else router.push('/')
+      else {
+        router.push(nextPath)
+        router.refresh()
+      }
     } catch { setError('Network error. Please try again.') }
     finally { setLoading(false) }
   }
@@ -80,8 +109,9 @@ export default function AuthPage() {
         {step === 'email' ? (
           <form onSubmit={requestCode} className="space-y-4">
             <div>
-              <label className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Email</label>
+              <label htmlFor="auth-email" className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Email</label>
               <input
+                id="auth-email"
                 type="email" inputMode="email" autoComplete="email" autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -89,8 +119,9 @@ export default function AuthPage() {
                 className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-base text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
               />
             </div>
-            <HumanVerify onVerified={(t) => setVerifyToken(t)} />
-            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
+            <HumanVerify key={humanKey} onVerified={(t) => setVerifyToken(t)} />
+            {notice && <div className="rounded-game-sm bg-game-info/10 text-game-info px-3 py-2 text-xs" role="status">{notice}</div>}
+            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs" role="alert">{error}</div>}
             <button
               type="submit"
               disabled={loading || !humanOk}
@@ -110,8 +141,9 @@ export default function AuthPage() {
               We sent a 6-digit code to <span className="text-game-ink">{email}</span>
             </p>
             <div>
-              <label className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Code</label>
+              <label htmlFor="auth-code" className="block text-xs uppercase tracking-[3px] text-game-ink-muted font-mono mb-2">Code</label>
               <input
+                id="auth-code"
                 ref={codeRef}
                 type="text" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6}
                 value={code}
@@ -120,7 +152,7 @@ export default function AuthPage() {
                 className="w-full rounded-game-md border border-game-border bg-game-surface px-4 py-3 text-center text-2xl font-mono tracking-[10px] text-game-ink outline-none placeholder:text-game-ink-faint focus:border-game-accent"
               />
             </div>
-            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs">{error}</div>}
+            {error && <div className="rounded-game-sm bg-game-danger/15 text-game-danger px-3 py-2 text-xs" role="alert">{error}</div>}
             <button
               type="submit"
               disabled={loading || code.length !== 6}
@@ -129,13 +161,25 @@ export default function AuthPage() {
             >
               {loading ? 'Verifying…' : 'Verify & sign in'}
             </button>
-            <div className="flex items-center justify-between text-xs">
-              <button type="button" onClick={() => { setStep('email'); setCode(''); setError('') }} className="text-game-ink-muted hover:text-game-ink">← Use a different email</button>
-              <button type="button" onClick={() => requestCode()} disabled={loading} className="text-game-accent hover:underline disabled:opacity-60">Resend code</button>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <button type="button" onClick={resendCode} className="min-h-11 px-1 text-game-ink-muted hover:text-game-ink">← Use a different email</button>
+              <button type="button" onClick={resendCode} disabled={loading} className="min-h-11 px-1 text-game-accent hover:underline disabled:opacity-60">Resend code</button>
             </div>
           </form>
         )}
       </div>
     </main>
+  )
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-svh items-center justify-center bg-game-deep px-4 text-game-ink font-mono text-sm">
+        Loading…
+      </main>
+    }>
+      <AuthForm />
+    </Suspense>
   )
 }

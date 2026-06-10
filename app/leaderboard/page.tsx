@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 interface Player {
   id: string;
   username: string;
+  display_name: string | null;
   wins: number;
   losses: number;
   created_at: string;
@@ -17,7 +18,7 @@ export default async function LeaderboardPage() {
   const db = createClient();
   const { data: players } = await db
     .from('spitwars_players')
-    .select('id, username, wins, losses, created_at')
+    .select('id, username, display_name, wins, losses, created_at')
     .order('wins', { ascending: false })
     .limit(50);
 
@@ -35,7 +36,7 @@ export default async function LeaderboardPage() {
           </div>
           {player && (
             <div className="text-right">
-              <div className="text-sm text-gray-400">{player.username}</div>
+              <div className="text-sm text-gray-400">{player.display_name?.trim() || player.username}</div>
               <div className="text-[10px] text-green-500">W{player.wins} / L{player.losses}</div>
             </div>
           )}
@@ -80,7 +81,7 @@ export default async function LeaderboardPage() {
                       className="text-sm font-bold truncate"
                       style={{ color: isMe ? '#f97316' : '#e5e7eb' }}
                     >
-                      {p.username}
+                      {p.display_name?.trim() || p.username}
                       {isMe && <span className="text-[9px] text-orange-700 ml-1">YOU</span>}
                     </div>
                     <div className="text-[9px] text-gray-600">

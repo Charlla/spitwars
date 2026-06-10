@@ -8,7 +8,10 @@
  * 2. Once both connected, game starts (host = LLAMAS team 0, guest = ALPACAS team 1)
  * 3. Each turn: active player submits action via PATCH /api/rooms/[code]
  * 4. Supabase Realtime broadcasts the change to both players
+ *    (with a slow-poll fallback so a dropped websocket can't strand a player)
  * 5. Non-active player receives the snapshot and renders the updated state
+ *
+ * Online play is OTP-gated: identity always comes from the session cookie.
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -16,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { SpitWarsEngine } from '@/lib/spitwars-engine';
 import { SpitWarsHUD } from '@/components/spitwars-hud';
+import { computeCanvasSize, RotateHint } from '@/components/spitwars-canvas';
 import { TEAMS, WEAPONS } from '@/lib/spitwars-data';
 import type { SessionPlayer } from '@/lib/auth';
 import type { GameState } from '@/lib/spitwars-engine';
@@ -35,10 +39,7 @@ interface RoomData {
 interface Props {
   room: RoomData;
   player: SessionPlayer | null;
-  initialGuestName?: string | null;
 }
-
-const GUEST_NAME_KEY = 'spitwars_guest_name';
 
 interface ViewportState {
   x: number;
@@ -61,22 +62,6 @@ interface AimState {
   targetDir: number;
   targetSpeed: number;
   targetLastChanged: number;
-}
-
-interface CanvasSize {
-  CW: number;
-  CH: number;
-  WW: number;
-}
-
-function lerp(terrain: number[], x: number, worldW: number): number {
-  const pts = terrain.length;
-  const t = (x / worldW) * (pts - 1);
-  const i = Math.floor(t);
-  const f = t - i;
-  if (i < 0) return terrain[0];
-  if (i >= pts - 1) return terrain[pts - 1];
-  return terrain[i] * (1 - f) + terrain[i + 1] * f;
 }
 
 function drawScene(
@@ -205,32 +190,29 @@ function drawScene(
   ctx.textBaseline = 'alphabetic';
 }
 
-export function OnlineRoom({ room: initialRoom, player, initialGuestName = null }: Props) {
+export function OnlineRoom({ room: initialRoom, player }: Props) {
   const router = useRouter();
   const [room, setRoom] = useState<RoomData>(initialRoom);
-  // Guest identity (only used when no session). Resolved client-side from
-  // localStorage so a guest's identity persists across reloads.
-  const [guestName, setGuestName] = useState<string | null>(initialGuestName);
-  useEffect(() => {
-    if (player || guestName) return;
-    try {
-      const stored = window.localStorage.getItem(GUEST_NAME_KEY);
-      if (stored && stored.trim()) setGuestName(stored.trim().slice(0, 20));
-    } catch {
-      // ignore
-    }
-  }, [player, guestName]);
-  const [canvasSize, setCanvasSize] = useState<CanvasSize>({ CW: 390, CH: 480, WW: 780 });
+  const [canvasSize, setCanvasSize] = useState(() => computeCanvasSize(390, 780, 1));
   const [uiState, setUiState] = useState<GameState | null>(null);
   const [movesLeft, setMovesLeft] = useState(5);
   const [selectedWeapon, setSelectedWeapon] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [connected, setConnected] = useState(true);
+  const [roomGone, setRoomGone] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [rematching, setRematching] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<SpitWarsEngine | null>(null);
   const rafRef = useRef<number>(0);
   const frameRef = useRef<number>(0);
+  const roomRef = useRef<RoomData>(initialRoom);
+  const connectedRef = useRef(true);
+  const sendChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const vpRef = useRef<ViewportState>({
     x: 0, targetX: 0, isDragging: false, dragStartX: 0, dragStartVP: 0,
     noSnap: false, snapTimer: null, holdAtImpact: false, impactX: 0,
@@ -249,27 +231,33 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
   const targetRef = useRef<HTMLDivElement>(null);
   const targetTextRef = useRef<HTMLSpanElement>(null);
 
-  // Determine if this player is host (team 0 = LLAMAS) or guest (team 1 = ALPACAS).
-  // Authed players are matched by id; guests are matched by display name.
-  const myDisplayName = player?.username ?? guestName ?? '';
-  const isHost = player
-    ? room.host_id === player.id
-    : !!myDisplayName && room.host_name === myDisplayName;
-  const isGuestSlot = player
-    ? room.guest_id === player.id
-    : !!myDisplayName && room.guest_name === myDisplayName;
+  // Host = team 0 (LLAMAS), guest = team 1 (ALPACAS). Session identity only.
+  const isHost = !!player && room.host_id === player.id;
+  const isGuestSlot = !!player && room.guest_id === player.id;
   const isParticipant = isHost || isGuestSlot;
   const myTeam = isHost ? 0 : 1;
+
+  // ─── Room update reconciliation (realtime + poll share this path) ──────────
+
+  const applyRoomUpdate = useCallback((updated: RoomData) => {
+    roomRef.current = updated;
+    setRoom(updated);
+    // Apply game state snapshot to the engine — but never while it's our own
+    // aiming turn (we are authoritative for our own moves; an echo of our last
+    // submission would rewind local-only movement).
+    const engine = engineRef.current;
+    if (updated.game_state && engine) {
+      const s = engine.state;
+      const ourAimingTurn = s.winner === null && s.phase === 'aiming' && s.currentTeam === myTeam;
+      if (!ourAimingTurn) engine.applySnapshot(updated.game_state);
+    }
+  }, [myTeam]);
 
   // ─── Resize ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const CW = Math.min(w - 16, 420);
-      const CH = Math.min(h - 260, 520);
-      setCanvasSize({ CW, CH, WW: 2 * CW });
+      setCanvasSize(computeCanvasSize(window.innerWidth, window.innerHeight, window.devicePixelRatio));
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -291,20 +279,67 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
           filter: `code=eq.${room.code}`,
         },
         (payload) => {
-          const updated = payload.new as RoomData;
-          setRoom(updated);
-
-          // Apply game state snapshot to engine
-          if (updated.game_state && engineRef.current) {
-            engineRef.current.applySnapshot(updated.game_state);
-          }
+          applyRoomUpdate(payload.new as RoomData);
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'spitwars_rooms',
+          filter: `code=eq.${room.code}`,
+        },
+        () => setRoomGone(true)
+      )
+      .subscribe((status) => {
+        const ok = status === 'SUBSCRIBED';
+        connectedRef.current = ok;
+        setConnected(ok);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [room.code, applyRoomUpdate]);
+
+  // ─── Poll fallback — covers dropped websockets / missed events ─────────────
+
+  useEffect(() => {
+    if (roomGone) return;
+    const intervalMs = room.status === 'waiting' ? 4000 : 7000;
+    const interval = setInterval(async () => {
+      // While playing with a healthy realtime channel, skip the poll.
+      if (room.status !== 'waiting' && connectedRef.current) return;
+      try {
+        const res = await fetch(`/api/rooms/${room.code}`);
+        if (res.status === 404) {
+          setRoomGone(true);
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.room && data.room.updated_at !== roomRef.current.updated_at) {
+          applyRoomUpdate(data.room as RoomData);
+        }
+      } catch {
+        // offline — banner already shows via realtime status
+      }
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [room.status, room.code, roomGone, applyRoomUpdate]);
+
+  // ─── Submit state to server (serialised — never drop a snapshot) ──────────
+
+  const submitState = useCallback((snapshot: Partial<GameState>) => {
+    const send = () =>
+      fetch(`/api/rooms/${room.code}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'state', game_state: snapshot }),
+      }).catch(() => null);
+    sendChainRef.current = sendChainRef.current.then(send, send);
+    return sendChainRef.current;
   }, [room.code]);
 
   // ─── Init engine when game starts ───────────────────────────────────────────
@@ -315,11 +350,21 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
 
     let engine: SpitWarsEngine;
 
-    if (room.game_state && engineRef.current) {
-      // Restore from saved state
+    if (!engineRef.current) {
+      // Fresh mount — new engine; restore the saved battle if one exists
+      // (covers reloading mid-game).
+      engine = new SpitWarsEngine(WW, CH, 'online');
+      engineRef.current = engine;
+      if (room.game_state) engine.applySnapshot(room.game_state);
+    } else if (room.game_state) {
+      // Re-sync from saved state — unless it's our own aiming turn (we are
+      // authoritative for our local moves; see applyRoomUpdate).
       engine = engineRef.current;
-      engine.applySnapshot(room.game_state);
+      const s = engine.state;
+      const ourAimingTurn = s.winner === null && s.phase === 'aiming' && s.currentTeam === myTeam;
+      if (!ourAimingTurn) engine.applySnapshot(room.game_state);
     } else {
+      // Rematch — state was reset, build a fresh battlefield.
       engine = new SpitWarsEngine(WW, CH, 'online');
       engineRef.current = engine;
     }
@@ -339,7 +384,7 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
     setMovesLeft(engine.state.movesLeft);
 
     if (!room.game_state) {
-      // Host seeds initial state
+      // Host seeds initial state (first game and every rematch)
       if (isHost) {
         const snapshot = engine.snapshot();
         submitState(snapshot);
@@ -348,8 +393,9 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
 
     vpRef.current.x = Math.max(0, engine.state.units[0].x - canvasSize.CW / 2);
     vpRef.current.targetX = vpRef.current.x;
+    vpRef.current.holdAtImpact = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.status, canvasSize.WW, canvasSize.CH]);
+  }, [room.status, room.game_state === null, canvasSize.WW, canvasSize.CH]);
 
   // ─── Animation loop ─────────────────────────────────────────────────────────
 
@@ -358,7 +404,8 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const { CW, CH, WW } = canvasSize;
+    const { CW, CH, WW, dpr } = canvasSize;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // crisp rendering on retina
 
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop);
@@ -432,32 +479,10 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
     return () => cancelAnimationFrame(rafRef.current);
   }, [canvasSize, selectedWeapon, myTeam]);
 
-  // ─── Submit state to Supabase ─────────────────────────────────────────────
-
-  const submitState = useCallback(async (snapshot: Partial<GameState>) => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      await fetch(`/api/rooms/${room.code}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          player
-            ? { action: 'state', game_state: snapshot }
-            : { action: 'state', game_state: snapshot, guestName: myDisplayName },
-        ),
-      });
-    } catch {
-      // silent
-    } finally {
-      setSubmitting(false);
-    }
-  }, [room.code, submitting, player, myDisplayName]);
-
-  // ─── After each engine state change on my turn, push to Supabase ─────────
+  // ─── After each engine state change on my turn, push to server ────────────
 
   useEffect(() => {
-    if (!uiState || !engineRef.current) return;
+    if (!uiState || !engineRef.current || !isParticipant) return;
     if (uiState.currentTeam !== myTeam) return; // only push my own moves
     if (uiState.phase === 'firing' || uiState.phase === 'transitioning') {
       // Push snapshot after firing
@@ -466,16 +491,17 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
     }
     if (uiState.winner !== null) {
       const snapshot = engineRef.current.snapshot();
-      submitState(snapshot);
-      // Record game result — only for authed players (guests don't have stats)
-      if (player) {
+      // Record stats only after the final state has landed (the server derives
+      // the winner from the room's own finished game_state).
+      submitState(snapshot).then(() => {
         fetch('/api/games', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ room_code: room.code, winner_team: uiState.winner, mode: 'online' }),
-        });
-      }
+        }).catch(() => null);
+      });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uiState?.phase, uiState?.turnKey, uiState?.winner]);
 
   // ─── Drag handlers ───────────────────────────────────────────────────────
@@ -503,7 +529,8 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
 
   // ─── Controls ────────────────────────────────────────────────────────────
 
-  const canControl = uiState?.currentTeam === myTeam &&
+  const canControl = isParticipant &&
+    uiState?.currentTeam === myTeam &&
     uiState?.phase === 'aiming' &&
     uiState?.winner === null &&
     room.status === 'playing';
@@ -520,21 +547,82 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
     eng.fire(aimRef.current.angle, aimRef.current.power, selectedWeapon, dir, aimRef.current.targetX);
   }, [canControl, selectedWeapon, canvasSize.WW]);
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(room.code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(room.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable — code is visible on screen anyway
+    }
+  };
+
+  const shareRoom = async () => {
+    const url = `${window.location.origin}/online/${room.code}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Spit Wars', text: `Battle me in Spit Wars! Room ${room.code}`, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {
+      // user cancelled the share sheet
+    }
   };
 
   const leaveRoom = async () => {
-    await fetch(`/api/rooms/${room.code}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(
-        player ? { action: 'leave' } : { action: 'leave', guestName: myDisplayName },
-      ),
-    });
+    if (leaving) return;
+    setLeaving(true);
+    try {
+      await fetch(`/api/rooms/${room.code}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'leave' }),
+      });
+    } catch {
+      // leaving anyway
+    }
     router.push('/online');
+  };
+
+  const joinRoom = async () => {
+    if (joining) return;
+    setJoining(true);
+    setJoinError('');
+    try {
+      const res = await fetch(`/api/rooms/${room.code}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'join' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.room) applyRoomUpdate(data.room as RoomData);
+      else setJoinError(data.error ?? 'Could not join room');
+    } catch {
+      setJoinError('Network error — try again.');
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const rematch = async () => {
+    if (rematching) return;
+    setRematching(true);
+    try {
+      const res = await fetch(`/api/rooms/${room.code}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rematch' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.room) applyRoomUpdate(data.room as RoomData);
+    } catch {
+      // poll/realtime will catch up
+    } finally {
+      setRematching(false);
+    }
   };
 
   const { CW, CH } = canvasSize;
@@ -543,9 +631,57 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
   const winner = currentState?.winner;
   const winTeam = winner !== null && winner !== undefined ? TEAMS[winner] : null;
 
-  // ─── Not a participant — guest with no identity match or random spectator ─
+  const bigBtn =
+    'inline-flex items-center justify-center min-h-12 px-6 py-3 font-bold rounded-lg text-white';
 
-  if (!isParticipant && room.status !== 'finished') {
+  // ─── Room closed by host ───────────────────────────────────────────────────
+
+  if (roomGone) {
+    return (
+      <div className="min-h-screen bg-[#060614] text-white font-mono flex flex-col items-center justify-center p-4 text-center">
+        <div className="text-2xl font-bold tracking-widest text-orange-400 mb-3">ROOM CLOSED</div>
+        <div className="text-sm text-gray-400 mb-6">The host closed this room.</div>
+        <button
+          onClick={() => router.push('/online')}
+          className={bigBtn}
+          style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}
+        >
+          BACK TO LOBBY
+        </button>
+      </div>
+    );
+  }
+
+  // ─── Not signed in — online play is OTP-gated ─────────────────────────────
+
+  if (!player) {
+    return (
+      <div className="min-h-screen bg-[#060614] text-white font-mono flex flex-col items-center justify-center p-4 text-center">
+        <div className="text-2xl font-bold tracking-widest text-orange-400 mb-3">
+          ROOM #{room.code}
+        </div>
+        <div className="text-sm text-gray-400 mb-6 max-w-xs">
+          {room.status === 'waiting'
+            ? `${room.host_name} is waiting for an opponent. Sign in to join the battle.`
+            : `${room.host_name} vs ${room.guest_name ?? '…'} — sign in to play online.`}
+        </div>
+        <a
+          href={`/auth?next=${encodeURIComponent(`/online/${room.code}`)}`}
+          className={bigBtn + ' w-full max-w-xs'}
+          style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
+        >
+          SIGN IN TO PLAY
+        </a>
+        <a href="/game" className="mt-4 text-[11px] text-gray-600 hover:text-gray-400 underline">
+          or play solo without an account
+        </a>
+      </div>
+    );
+  }
+
+  // ─── Signed in but not in this room ────────────────────────────────────────
+
+  if (!isParticipant) {
     return (
       <div className="min-h-screen bg-[#060614] text-white font-mono flex flex-col items-center justify-center p-4 text-center">
         <div className="text-2xl font-bold tracking-widest text-orange-400 mb-4">
@@ -556,18 +692,22 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
             ? `${room.host_name} is waiting for an opponent`
             : `${room.host_name} vs ${room.guest_name} — game in progress`}
         </div>
+        {joinError && (
+          <div className="text-red-400 text-xs mb-3" role="alert">{joinError}</div>
+        )}
         {room.status === 'waiting' ? (
           <button
-            onClick={() => router.push(`/online?join=${room.code}`)}
-            className="px-6 py-3 font-bold rounded-lg text-white"
+            onClick={joinRoom}
+            disabled={joining}
+            className={bigBtn + ' disabled:opacity-50'}
             style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
           >
-            GO TO LOBBY TO JOIN
+            {joining ? 'JOINING…' : 'JOIN THIS BATTLE'}
           </button>
         ) : (
           <button
             onClick={() => router.push('/online')}
-            className="px-6 py-3 font-bold rounded-lg text-white"
+            className={bigBtn}
             style={{ background: 'linear-gradient(135deg,#f97316,#dc2626)' }}
           >
             BACK TO LOBBY
@@ -589,19 +729,29 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
 
           <div className="bg-white/[.03] border border-[#1e3a2f] rounded-xl p-6 mb-4">
             <div className="text-[9px] text-gray-500 tracking-widest mb-2">ROOM CODE</div>
-            <div
-              className="text-4xl font-bold tracking-widest mb-3 cursor-pointer"
+            <button
+              className="text-4xl font-bold tracking-widest mb-4 block w-full"
               style={{ color: '#f97316' }}
               onClick={copyCode}
+              aria-label={`Room code ${room.code.split('').join(' ')} — tap to copy`}
             >
               {room.code}
-            </div>
-            <button
-              onClick={copyCode}
-              className="text-[10px] text-gray-500 hover:text-gray-400 border border-gray-700 rounded px-2 py-1"
-            >
-              {copied ? 'COPIED!' : 'COPY CODE'}
             </button>
+            <div className="flex gap-2">
+              <button
+                onClick={copyCode}
+                className="flex-1 min-h-11 text-xs text-gray-300 border border-gray-700 rounded-lg px-3 py-2 hover:border-gray-500"
+              >
+                {copied ? 'COPIED!' : 'COPY'}
+              </button>
+              <button
+                onClick={shareRoom}
+                className="flex-1 min-h-11 text-xs font-bold rounded-lg px-3 py-2 text-white"
+                style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
+              >
+                SHARE LINK
+              </button>
+            </div>
           </div>
 
           <div className="text-sm text-gray-500 mb-4">
@@ -613,17 +763,25 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
             <div
               className="w-2 h-2 rounded-full animate-pulse"
               style={{ background: '#22c55e' }}
+              aria-hidden
             />
             <span className="text-[11px] text-gray-500">
               {room.host_name} (host) — waiting
             </span>
           </div>
 
+          {!connected && (
+            <div className="text-[11px] text-yellow-500 mb-4" role="status">
+              Reconnecting… (we&apos;ll keep checking for your opponent)
+            </div>
+          )}
+
           <button
             onClick={leaveRoom}
-            className="text-[10px] text-gray-700 hover:text-gray-500"
+            disabled={leaving}
+            className="min-h-11 px-4 text-xs text-gray-500 hover:text-gray-300 border border-gray-800 rounded-lg disabled:opacity-50"
           >
-            cancel room
+            {leaving ? 'CANCELLING…' : isHost ? 'CANCEL ROOM' : 'LEAVE'}
           </button>
         </div>
       </div>
@@ -634,13 +792,22 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
 
   return (
     <div className="min-h-screen bg-[#060614] text-white font-mono select-none flex flex-col">
+      <RotateHint />
+
       {/* Room info strip */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#0a0a18] border-b border-[#1e3a2f] text-[9px]">
-        <span style={{ color: '#f97316' }} className="font-bold">{room.host_name}</span>
-        <span className="text-gray-600">VS</span>
-        <span style={{ color: '#06b6d4' }} className="font-bold">{room.guest_name ?? '—'}</span>
-        <span className="text-gray-700 ml-2">#{room.code}</span>
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-[#0a0a18] border-b border-[#1e3a2f] text-[10px]">
+        <span style={{ color: '#f97316' }} className="font-bold truncate min-w-0">{room.host_name}</span>
+        <span className="text-gray-600 flex-shrink-0">VS</span>
+        <span style={{ color: '#06b6d4' }} className="font-bold truncate min-w-0">{room.guest_name ?? '—'}</span>
+        <span className="text-gray-700 flex-shrink-0">#{room.code}</span>
       </div>
+
+      {/* Connection banner */}
+      {!connected && (
+        <div className="bg-yellow-500/10 border-b border-yellow-600 text-yellow-400 text-[11px] text-center py-1" role="status">
+          Reconnecting to opponent…
+        </div>
+      )}
 
       {/* Canvas */}
       <div className="flex items-start justify-center pt-2 pb-0 px-2">
@@ -654,16 +821,16 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
         >
           <canvas
             ref={canvasRef}
-            width={CW}
-            height={CH}
+            width={CW * canvasSize.dpr}
+            height={CH * canvasSize.dpr}
             className="block rounded-lg"
-            style={{ pointerEvents: 'none', border: '1px solid #1e3a2f' }}
+            style={{ pointerEvents: 'none', border: '1px solid #1e3a2f', width: CW, height: CH }}
           />
 
           {/* Waiting for opponent's turn */}
           {currentState && !isMyTurn && currentState.phase === 'aiming' && winner === null && (
             <div className="absolute top-12 left-1/2 -translate-x-1/2 bg-cyan-500/10 border border-cyan-500 px-4 py-1.5 rounded-full text-sm text-cyan-400 whitespace-nowrap">
-              {isMyTurn ? '' : `${TEAMS[currentState.currentTeam].names[0]} is thinking...`}
+              {`${isHost ? (room.guest_name ?? 'Opponent') : room.host_name} is thinking…`}
             </div>
           )}
 
@@ -675,25 +842,58 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
           )}
 
           {/* Game over overlay */}
-          {winner !== null && winTeam && (
-            <div className="absolute inset-0 bg-[#050510]/95 flex flex-col items-center justify-center gap-3 rounded-lg">
-              <div className="text-3xl font-bold tracking-widest" style={{ color: winTeam.color }}>
-                {myTeam === winner ? 'YOU WIN!' : `${winTeam.name} WIN`}
+          {winner !== null && winner !== undefined && winTeam && (
+            <div className="absolute inset-0 bg-[#050510]/95 flex flex-col items-center justify-center gap-3 rounded-lg p-4">
+              <div className="text-3xl font-bold tracking-widest text-center" style={{ color: winTeam.color }}>
+                {myTeam === winner ? 'YOU WIN!' : 'YOU LOSE'}
               </div>
               <div className="text-sm text-gray-500">Spit happens.</div>
-              <div className="flex gap-3 mt-4">
+              <div className="flex flex-wrap justify-center gap-3 mt-4">
                 <button
-                  onClick={() => router.push('/online')}
-                  className="px-6 py-2.5 font-bold rounded-lg text-white"
+                  onClick={rematch}
+                  disabled={rematching}
+                  className={bigBtn + ' disabled:opacity-50'}
                   style={{ background: `linear-gradient(135deg,${winTeam.color},#dc2626)` }}
                 >
-                  LOBBY
+                  {rematching ? 'STARTING…' : 'REMATCH'}
                 </button>
                 <button
                   onClick={leaveRoom}
-                  className="px-6 py-2.5 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition"
+                  disabled={leaving}
+                  className="min-h-12 px-6 py-3 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
                 >
-                  LEAVE
+                  {leaving ? 'LEAVING…' : 'LEAVE'}
+                </button>
+              </div>
+              <div className="text-[10px] text-gray-600 mt-1">
+                Rematch keeps both players in this room.
+              </div>
+            </div>
+          )}
+
+          {/* Leave confirm overlay */}
+          {confirmLeave && winner === null && (
+            <div className="absolute inset-0 bg-[#050510]/95 flex flex-col items-center justify-center gap-4 rounded-lg p-4">
+              <div className="text-xl font-bold tracking-widest text-orange-400">LEAVE BATTLE?</div>
+              <div className="text-xs text-gray-500 text-center max-w-[240px]">
+                {isHost
+                  ? 'Leaving closes the room for both players.'
+                  : 'Your opponent will be left waiting for a new challenger.'}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmLeave(false)}
+                  className={bigBtn}
+                  style={{ background: 'linear-gradient(135deg,#06b6d4,#0891b2)' }}
+                >
+                  KEEP PLAYING
+                </button>
+                <button
+                  onClick={leaveRoom}
+                  disabled={leaving}
+                  className="min-h-12 px-6 py-3 border border-red-900 text-red-400 rounded-lg hover:bg-red-950 transition disabled:opacity-50"
+                >
+                  {leaving ? 'LEAVING…' : 'LEAVE'}
                 </button>
               </div>
             </div>
@@ -707,7 +907,7 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
           state={currentState}
           movesLeft={movesLeft}
           selectedWeapon={selectedWeapon}
-          canControl={canControl}
+          canControl={!!canControl}
           isAiTurn={false}
           angleRef={angleRef}
           angleTextRef={angleTextRef}
@@ -723,7 +923,7 @@ export function OnlineRoom({ room: initialRoom, player, initialGuestName = null 
           onJetpackStop={() => engineRef.current?.jetpackStop()}
           onShield={() => canControl && engineRef.current?.shield()}
           onFire={handleFire}
-          onQuit={leaveRoom}
+          onQuit={() => setConfirmLeave(true)}
         />
       )}
     </div>

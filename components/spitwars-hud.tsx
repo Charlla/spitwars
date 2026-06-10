@@ -55,7 +55,7 @@ export function SpitWarsHUD({
   const isFiring = state.phase === 'firing';
 
   return (
-    <div className="bg-[#0a0a18] border-t border-[#1e3a2f] px-2 py-1.5 flex flex-col gap-1.5">
+    <div className="bg-[#0a0a18] border-t border-[#1e3a2f] px-2 py-1.5 pb-safe flex flex-col gap-1.5">
       {/* Top row: team info + HP bars + weapon selector */}
       <div className="flex gap-1.5 items-stretch">
         {/* Current player badge */}
@@ -120,7 +120,9 @@ export function SpitWarsHUD({
             <button
               key={w.id}
               onClick={() => canControl && state.phase === 'aiming' && onWeaponSelect(i)}
-              className="w-9 h-9 flex flex-col items-center justify-center rounded-md transition-all"
+              aria-label={`${w.name} — ${w.desc}`}
+              aria-pressed={selectedWeapon === i}
+              className="w-11 h-11 flex flex-col items-center justify-center rounded-md transition-all"
               style={{
                 background: selectedWeapon === i ? 'rgba(251,191,36,.15)' : 'rgba(255,255,255,.03)',
                 border: `1px solid ${selectedWeapon === i ? '#fbbf24' : '#374151'}`,
@@ -137,14 +139,15 @@ export function SpitWarsHUD({
       {/* Movement buttons */}
       <div className="flex gap-1 justify-center">
         {[
-          { label: 'LEFT',   action: onLeft,   color: '#9ca3af', bg: 'rgba(255,255,255,.05)' },
-          { label: 'JUMP',   action: onJump,   color: '#22c55e', bg: 'rgba(34,197,94,.1)' },
-        ].map(({ label, action, color, bg }) => (
+          { label: 'LEFT',   aria: 'Walk left',  action: onLeft,   color: '#9ca3af', bg: 'rgba(255,255,255,.05)' },
+          { label: 'JUMP',   aria: 'Jump',       action: onJump,   color: '#22c55e', bg: 'rgba(34,197,94,.1)' },
+        ].map(({ label, aria, action, color, bg }) => (
           <button
             key={label}
             onClick={action}
             disabled={!canControl}
-            className="w-12 h-8 text-[10px] font-bold rounded-md flex items-center justify-center"
+            aria-label={aria}
+            className="w-14 h-11 text-[10px] font-bold rounded-md flex items-center justify-center"
             style={{
               background: canControl ? bg : 'rgba(255,255,255,.02)',
               border: `1px solid ${canControl ? `${color}44` : '#374151'}`,
@@ -161,7 +164,8 @@ export function SpitWarsHUD({
           onPointerUp={onJetpackStop}
           onPointerLeave={onJetpackStop}
           disabled={!canControl || (currentUnit?.jetpackFuel ?? 0) <= 0}
-          className="w-12 h-8 text-[10px] font-bold rounded-md flex items-center justify-center"
+          aria-label="Jetpack — hold to fly"
+          className="w-14 h-11 text-[10px] font-bold rounded-md flex items-center justify-center touch-none"
           style={{
             background: 'rgba(253,224,71,.1)',
             border: `1px solid ${(currentUnit?.jetpackFuel ?? 0) > 0 ? '#fde047' : '#374151'}`,
@@ -176,7 +180,8 @@ export function SpitWarsHUD({
         <button
           onClick={onShield}
           disabled={!canControl || !!currentUnit?.hasShield}
-          className="w-12 h-8 text-[10px] font-bold rounded-md flex items-center justify-center"
+          aria-label="Shield — halves next hit"
+          className="w-14 h-11 text-[10px] font-bold rounded-md flex items-center justify-center"
           style={{
             background: currentUnit?.hasShield ? 'rgba(96,165,250,.2)' : 'rgba(255,255,255,.05)',
             border: `1px solid ${currentUnit?.hasShield ? '#60a5fa' : '#374151'}`,
@@ -188,13 +193,14 @@ export function SpitWarsHUD({
         </button>
 
         {[
-          { label: 'RIGHT', action: onRight, color: '#9ca3af', bg: 'rgba(255,255,255,.05)' },
-        ].map(({ label, action, color, bg }) => (
+          { label: 'RIGHT', aria: 'Walk right', action: onRight, color: '#9ca3af', bg: 'rgba(255,255,255,.05)' },
+        ].map(({ label, aria, action, color, bg }) => (
           <button
             key={label}
             onClick={action}
             disabled={!canControl}
-            className="w-12 h-8 text-[10px] font-bold rounded-md flex items-center justify-center"
+            aria-label={aria}
+            className="w-14 h-11 text-[10px] font-bold rounded-md flex items-center justify-center"
             style={{
               background: canControl ? bg : 'rgba(255,255,255,.02)',
               border: `1px solid ${canControl ? `${color}44` : '#374151'}`,
@@ -266,7 +272,8 @@ export function SpitWarsHUD({
         <button
           onClick={onFire}
           disabled={!canControl}
-          className="w-14 h-10 font-bold text-xs tracking-wider rounded-lg flex items-center justify-center"
+          aria-label="Fire weapon — ends turn"
+          className="w-16 h-12 font-bold text-xs tracking-wider rounded-lg flex items-center justify-center"
           style={{
             background: canControl
               ? `linear-gradient(135deg,${team.color},${state.currentTeam === 0 ? '#dc2626' : '#0891b2'})`
@@ -286,7 +293,7 @@ export function SpitWarsHUD({
         <button
           onClick={onQuit}
           aria-label="Open menu and pause"
-          className="ml-2 inline-flex items-center gap-1 rounded-md border border-game-border-strong px-2 py-1 text-game-ink-muted hover:text-game-ink hover:border-game-accent/60"
+          className="ml-2 inline-flex min-h-11 items-center gap-1 rounded-md border border-game-border-strong px-3 py-1 text-game-ink-muted hover:text-game-ink hover:border-game-accent/60"
         >
           ≡ MENU
         </button>

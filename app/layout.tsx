@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Spit Wars — Artillery Llamas",
   description: "Turn-based artillery game with llamas. Spit happens.",
+};
+
+// Game viewport: cover the notch (safe-area insets handled in CSS) and lock
+// pinch-zoom so aiming gestures never zoom the page mid-battle.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#060614",
 };
 
 export default function RootLayout({

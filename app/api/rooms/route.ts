@@ -29,10 +29,9 @@ export async function GET() {
   return NextResponse.json({ rooms: rooms ?? [] });
 }
 
-// POST /api/rooms — create a room. Either authed player OR guest with a name.
+// POST /api/rooms — create a room. Online play requires a signed-in player
+// (OTP); guest names are not accepted.
 export async function POST(req: NextRequest) {
-  // Online play (create/join rooms) requires a signed-in player. Guest
-  // names are no longer accepted — sign in with OTP first.
   const player = await requireAuth(req);
   if (!player) {
     return NextResponse.json({ error: 'Sign in to play online.' }, { status: 401 });
@@ -59,7 +58,9 @@ export async function POST(req: NextRequest) {
     .insert({
       code,
       host_id: player.id,
-      host_name: player.username,
+      // Prefer the chosen display name — username is derived from the email
+      // local-part, which players shouldn't be broadcasting to strangers.
+      host_name: player.display_name?.trim() || player.username,
       status: 'waiting',
       game_state: null,
     })

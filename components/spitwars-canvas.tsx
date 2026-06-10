@@ -47,6 +47,28 @@ interface CanvasSize {
   CW: number; // canvas width (viewport)
   CH: number; // canvas height
   WW: number; // world width = 2×CW
+  dpr: number; // device pixel ratio (capped) — crisp canvas on retina
+}
+
+// Shared by solo + online views: compute the canvas viewport from the window,
+// reserving room for the HUD (~290px incl. safe area) and flooring the height
+// so short landscape viewports never collapse the battlefield.
+export function computeCanvasSize(w: number, h: number, dprRaw: number): CanvasSize {
+  const CW = Math.max(280, Math.min(w - 16, 420));
+  const CH = Math.max(220, Math.min(h - 300, 520));
+  return { CW, CH, WW: 2 * CW, dpr: Math.min(Math.max(dprRaw || 1, 1), 2) };
+}
+
+// Portrait-first gameplay: nudge players to rotate on very short landscape
+// viewports (CSS shows this only when orientation+height demand it).
+export function RotateHint() {
+  return (
+    <div className="rotate-hint p-6 font-mono text-white" role="status">
+      <div className="text-3xl" aria-hidden>↻</div>
+      <div className="text-sm font-bold tracking-widest text-orange-400">ROTATE YOUR DEVICE</div>
+      <div className="text-xs text-gray-400">Spit Wars plays best in portrait.</div>
+    </div>
+  );
 }
 
 // ─── Llama SVG component ─────────────────────────────────────────────────────
@@ -729,7 +751,7 @@ interface GameCanvasProps {
 }
 
 export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: GameCanvasProps) {
-  const [canvasSize, setCanvasSize] = useState<CanvasSize>({ CW: 390, CH: 480, WW: 780 });
+  const [canvasSize, setCanvasSize] = useState<CanvasSize>({ CW: 390, CH: 480, WW: 780, dpr: 1 });
   const [uiState, setUiState] = useState<GameState | null>(null);
   const [movesLeft, setMovesLeft] = useState(5);
   const [selectedWeapon, setSelectedWeapon] = useState(0);
@@ -765,11 +787,7 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
 
   useEffect(() => {
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const CW = Math.min(w - 16, 420);
-      const CH = Math.min(h - 260, 520);
-      setCanvasSize({ CW, CH, WW: 2 * CW });
+      setCanvasSize(computeCanvasSize(window.innerWidth, window.innerHeight, window.devicePixelRatio));
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -836,7 +854,8 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const { CW, CH, WW } = canvasSize;
+    const { CW, CH, WW, dpr } = canvasSize;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // render at native resolution
 
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop);
@@ -1049,6 +1068,7 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
 
   return (
     <div className="min-h-screen bg-[#060614] text-white font-mono select-none flex flex-col">
+      <RotateHint />
       {/* Canvas area */}
       <div className="flex items-start justify-center pt-2 pb-0 px-2">
         <div
@@ -1061,10 +1081,10 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
         >
           <canvas
             ref={canvasRef}
-            width={CW}
-            height={CH}
+            width={CW * canvasSize.dpr}
+            height={CH * canvasSize.dpr}
             className="block rounded-lg"
-            style={{ pointerEvents: 'none', border: '1px solid #1e3a2f' }}
+            style={{ pointerEvents: 'none', border: '1px solid #1e3a2f', width: CW, height: CH }}
           />
 
           {/* Pass-and-play overlay */}
@@ -1119,14 +1139,14 @@ export function SpitWarsGameCanvas({ mode, aiPersonality, onQuit, onGameEnd }: G
                     vpRef.current.targetX = vpRef.current.x;
                     vpRef.current.holdAtImpact = false;
                   }}
-                  className="px-6 py-2.5 font-bold rounded-lg text-white"
+                  className="px-6 py-3 min-h-11 font-bold rounded-lg text-white"
                   style={{ background: `linear-gradient(135deg,${winTeam.color},#dc2626)` }}
                 >
                   REMATCH
                 </button>
                 <button
                   onClick={onQuit}
-                  className="px-6 py-2.5 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition"
+                  className="px-6 py-3 min-h-11 border border-gray-600 text-gray-400 rounded-lg hover:bg-gray-800 transition"
                 >
                   MENU
                 </button>
