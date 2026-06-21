@@ -2,7 +2,10 @@
 // Single source of truth for the public site URL and brand facts so that page
 // metadata, JSON-LD, sitemap and robots never drift from one another.
 
-export const SITE_URL = 'https://spitwars.com';
+// The apex domain 308-redirects to www, so www is the canonical resolving host.
+// Keep canonical URLs, sitemap, robots and OG pointed at the host that actually
+// serves 200s (no canonical-points-to-a-redirect penalty).
+export const SITE_URL = 'https://www.spitwars.com';
 export const SITE_NAME = 'Spit Wars';
 export const SITE_TAGLINE = 'Turn-based artillery llamas. Spit happens.';
 
