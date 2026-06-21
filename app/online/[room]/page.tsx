@@ -1,7 +1,14 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getSessionPlayer } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { OnlineRoom } from './room-client';
+
+// Private, ephemeral game rooms — never index per-room URLs.
+export const metadata: Metadata = {
+  title: 'Online Room',
+  robots: { index: false, follow: false },
+};
 
 interface Props {
   params: Promise<{ room: string }>;

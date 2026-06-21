@@ -1,17 +1,19 @@
-'use client';
+import type { Metadata } from 'next';
+import GameClient from './game-client';
 
-import dynamic from 'next/dynamic';
-
-// Canvas must be client-side only — no SSR
-const SpitWarsLocal = dynamic(
-  () => import('@/components/spitwars-canvas').then((m) => m.default),
-  { ssr: false, loading: () => (
-    <div className="min-h-screen bg-[#060614] flex items-center justify-center text-white font-mono text-sm">
-      Loading...
-    </div>
-  ) }
-);
+export const metadata: Metadata = {
+  title: 'Play Solo',
+  description:
+    'Play Spit Wars solo in your browser — battle the AI or pass-and-play on one device. Aim, mind the wind, and spit your way to victory across destructible terrain.',
+  alternates: { canonical: '/game' },
+  openGraph: {
+    title: 'Play Spit Wars — Solo Artillery Battle',
+    description:
+      'Battle the AI or pass-and-play. Aim, mind the wind, and spit your way to victory.',
+    url: '/game',
+  },
+};
 
 export default function GamePage() {
-  return <SpitWarsLocal />;
+  return <GameClient />;
 }

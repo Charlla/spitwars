@@ -1,6 +1,19 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getSessionPlayer } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+
+export const metadata: Metadata = {
+  title: 'Leaderboard',
+  description:
+    'The Spit Wars leaderboard — the top spitters ranked by wins. See who rules the herd across solo and online artillery battles.',
+  alternates: { canonical: '/leaderboard' },
+  openGraph: {
+    title: 'Spit Wars Leaderboard — Top Spitters',
+    description: 'The top Spit Wars players ranked by wins.',
+    url: '/leaderboard',
+  },
+};
 
 interface Player {
   id: string;
@@ -29,9 +42,9 @@ export default async function LeaderboardPage() {
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <div className="text-2xl font-bold tracking-widest bg-gradient-to-r from-orange-500 to-cyan-500 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold tracking-widest bg-gradient-to-r from-orange-500 to-cyan-500 bg-clip-text text-transparent">
               LEADERBOARD
-            </div>
+            </h1>
             <div className="text-[10px] text-gray-600 tracking-widest">TOP SPITTERS</div>
           </div>
           {player && (

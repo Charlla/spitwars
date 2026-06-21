@@ -1,6 +1,35 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getSessionPlayer } from '@/lib/auth';
+import { JsonLd } from '@/components/json-ld';
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from '@/lib/seo';
+
+export const metadata: Metadata = {
+  title: 'Spit Wars — Turn-Based Artillery Llamas',
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: '/' },
+};
+
+// Q&A used both on-page (extractable prose) and as FAQPage structured data.
+const FAQ: { q: string; a: string }[] = [
+  {
+    q: 'What is Spit Wars?',
+    a: 'Spit Wars is a free, turn-based artillery game where rival teams of llamas and alpacas lob spit bombs, mortars, missiles and air strikes across destructible terrain. Wind and angle decide who eats grass.',
+  },
+  {
+    q: 'Is Spit Wars free to play?',
+    a: 'Yes. Spit Wars runs in your browser for free — no download required. Play solo against AI, pass-and-play locally, or battle a friend online.',
+  },
+  {
+    q: 'Can I play Spit Wars online with friends?',
+    a: 'Yes. Sign in with your email, create a room, and share the 6-character room code with a friend to play a live online match.',
+  },
+  {
+    q: 'What weapons are in Spit Wars?',
+    a: 'Five weapons: the Spit Bomb (bounces), the Mortar (high arc), the Missile (fast and wind-stable), the Air Strike (mark a target) and the Cluster (splits three ways).',
+  },
+];
 
 // Button styles mirror NeonButton (games/NeonButton.tsx) — kept inline here
 // because we need Link semantics, not a <button>.
@@ -23,6 +52,45 @@ export default async function Home() {
 
   return (
     <div className="relative min-h-svh flex flex-col items-center overflow-hidden bg-game-deep text-game-ink p-4">
+      {/* Structured data: the game itself + the on-page FAQ. */}
+      <JsonLd
+        data={{
+          '@context': 'https://schema.org',
+          '@type': 'VideoGame',
+          name: SITE_NAME,
+          url: SITE_URL,
+          description: SITE_DESCRIPTION,
+          image: `${SITE_URL}/og.png`,
+          inLanguage: 'en',
+          applicationCategory: 'Game',
+          genre: ['Artillery', 'Turn-based strategy', 'Casual'],
+          gamePlatform: ['Web browser', 'Mobile web'],
+          operatingSystem: 'Any (web browser)',
+          playMode: ['SinglePlayer', 'MultiPlayer'],
+          publisher: { '@id': `${SITE_URL}/#organization` },
+          offers: {
+            '@type': 'Offer',
+            price: '0',
+            priceCurrency: 'USD',
+            availability: 'https://schema.org/InStock',
+          },
+        }}
+      />
+      <JsonLd
+        data={{
+          '@context': 'https://schema.org',
+          '@type': 'FAQPage',
+          mainEntity: FAQ.map((f) => ({
+            '@type': 'Question',
+            name: f.q,
+            acceptedAnswer: { '@type': 'Answer', text: f.a },
+          })),
+        }}
+      />
+
+      {/* Accessible / crawlable page title (the visual title is the hero art). */}
+      <h1 className="sr-only">Spit Wars — turn-based artillery llamas</h1>
+
       {/* Hero — AI-generated title art */}
       <div
         aria-hidden
@@ -81,6 +149,35 @@ export default async function Home() {
         )}
 
         <div className="mt-8 mb-4 text-[9px] text-game-ink-faint">spitwars.com</div>
+
+        {/* SSR factual content — readable by crawlers and LLMs without JS. */}
+        <section className="w-full max-w-md mt-2 mb-10 text-left">
+          <h2 className="text-sm font-mono font-bold tracking-[3px] uppercase text-game-accent">
+            About Spit Wars
+          </h2>
+          <p className="mt-2 text-xs leading-relaxed text-game-ink-muted">
+            Spit Wars is a free, turn-based artillery game. Two teams — the
+            Llamas and the Alpacas — take turns aiming spit bombs, mortars,
+            missiles, cluster shots and air strikes across destructible terrain.
+            Account for wind and angle, line up the perfect shot, and reduce the
+            other herd to grass-eating regret. Play solo against AI, pass-and-play
+            on one device, or battle a friend online with a shared room code.
+          </p>
+
+          <h2 className="mt-6 text-sm font-mono font-bold tracking-[3px] uppercase text-game-accent">
+            FAQ
+          </h2>
+          <dl className="mt-2 space-y-3">
+            {FAQ.map((f) => (
+              <div key={f.q}>
+                <dt className="text-xs font-bold text-game-ink">{f.q}</dt>
+                <dd className="mt-1 text-xs leading-relaxed text-game-ink-muted">
+                  {f.a}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       </div>
     </div>
   );

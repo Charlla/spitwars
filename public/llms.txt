@@ -1,0 +1,41 @@
+# Spit Wars
+
+> Spit Wars is a free, turn-based artillery game where rival teams of llamas and
+> alpacas lob spit bombs, mortars and missiles across destructible terrain. Play
+> solo against AI, pass-and-play on one device, or battle a friend online. It runs
+> in any web browser — no download, no payment.
+
+## What it is
+
+- Genre: turn-based artillery / "worms-like" strategy, casual and mobile-first.
+- Teams: the **Llamas** (orange) vs the **Alpacas** (cyan), two units each.
+- Each turn: move, pick a weapon, set angle and power, account for wind, fire.
+- Terrain is destructible — every hit reshapes the battlefield.
+- Free to play. Sign-in (email one-time code) is only needed for online play and
+  saving win/loss stats.
+
+## Weapons
+
+- **Spit Bomb** (💦) — bounces once before it lands.
+- **Mortar** (💣) — fixed high arc, big blast, power-only aim.
+- **Missile** (🚀) — fast and barely affected by wind.
+- **Air Strike** (🎯) — mark a target on the map for a precision drop.
+- **Cluster** (💥) — splits into three on the way down.
+
+## Game modes
+
+- Solo vs AI (personalities: Karen and Chad).
+- Pass-and-play local multiplayer on one device.
+- Online multiplayer: sign in, create a room, share the 6-character room code.
+
+## Key pages
+
+- [Home](https://spitwars.com/): overview and play options.
+- [Play Solo](https://spitwars.com/game): battle the AI or pass-and-play.
+- [Play Online](https://spitwars.com/online): create or join a room.
+- [Leaderboard](https://spitwars.com/leaderboard): top players ranked by wins.
+
+## About
+
+- Made by Bot & Botty (https://botandbotty.com).
+- Contact: bot@botandbotty.com
